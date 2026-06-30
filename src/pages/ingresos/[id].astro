@@ -24,12 +24,17 @@ const eventos = await getEventos(Astro);
 if (Astro.request.method === 'POST') {
   try {
     const formData = await Astro.request.formData();
+    const eventoId = formData.get('evento_id')?.toString() || '';
+
+    if (!eventoId) {
+      throw new Error('Debes seleccionar un evento para registrar el ingreso');
+    }
     
     const ingresoData = {
       concepto: formData.get('concepto')?.toString() || '',
       cantidad: parseFloat(formData.get('cantidad')?.toString() || '0'),
       fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
-      evento_id: formData.has('evento_id') && formData.get('evento_id') ? formData.get('evento_id')!.toString() : null,
+      evento_id: eventoId,
     };
 
     console.log('Datos del ingreso a actualizar:', JSON.stringify(ingresoData, null, 2));
@@ -47,7 +52,7 @@ if (Astro.request.method === 'POST') {
 }
 ---
 
-<AppLayout title={`Editar ${ingreso.concepto}`}>
+<AppLayout title={`Editar ${ingreso.concepto || 'ingreso'}`}>
   <div class="max-w-3xl mx-auto space-y-6">
     <div>
       <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Editar ingreso</h1>

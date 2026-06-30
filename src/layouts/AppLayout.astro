@@ -1,6 +1,6 @@
 ---
 import '../styles/global.css';
-import { AppShell } from '../components/layout/AppShell';
+import { NavShell } from '../components/layout/NavShell';
 
 interface Props {
   title?: string;
@@ -18,6 +18,8 @@ const pathname = Astro.url.pathname;
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <meta content={Astro.generator} name="generator" />
     <title>{title}</title>
+    <link rel="icon" type="image/png" href="/logo-bacanxs.png" />
+    <link rel="apple-touch-icon" href="/logo-bacanxs.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -26,8 +28,11 @@ const pathname = Astro.url.pathname;
     />
   </head>
   <body class="bg-[#0a0a0a] text-text-primary antialiased">
-    <AppShell pathname={pathname} userName={userName}>
-      <slot />
-    </AppShell>
+    <NavShell pathname={pathname} userName={userName} client:load />
+    <div class="min-h-screen pl-0 md:pl-60">
+      <main class="p-4 md:p-6">
+        <slot />
+      </main>
+    </div>
   </body>
 </html>

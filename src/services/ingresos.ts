@@ -2,15 +2,15 @@ import type { APIContext } from 'astro';
 import { getSupabaseServerClient } from '../lib/supabase';
 import type { Database } from '../types/database';
 
-type Ingreso = Database['public']['Tables']['ingresos']['Row'];
-type IngresoInsert = Database['public']['Tables']['ingresos']['Insert'];
-type IngresoUpdate = Database['public']['Tables']['ingresos']['Update'];
+type Ingreso = Database['public']['Tables']['pagos_evento']['Row'];
+type IngresoInsert = Database['public']['Tables']['pagos_evento']['Insert'];
+type IngresoUpdate = Database['public']['Tables']['pagos_evento']['Update'];
 
 export async function getIngresos(context: APIContext) {
   const supabase = getSupabaseServerClient(context);
   
   const { data, error } = await supabase
-    .from('ingresos')
+    .from('pagos_evento')
     .select('*, eventos(nombre)')
     .order('fecha', { ascending: false });
 
@@ -26,7 +26,7 @@ export async function getIngreso(context: APIContext, id: string) {
   const supabase = getSupabaseServerClient(context);
   
   const { data, error } = await supabase
-    .from('ingresos')
+    .from('pagos_evento')
     .select('*, eventos(nombre)')
     .eq('id', id)
     .single();
@@ -51,7 +51,7 @@ export async function createIngreso(context: APIContext, ingreso: IngresoInsert)
   };
   
   const { data, error } = await supabase
-    .from('ingresos')
+    .from('pagos_evento')
     .insert(ingresoData)
     .select()
     .single();
@@ -70,7 +70,7 @@ export async function updateIngreso(context: APIContext, id: string, ingreso: In
   console.log('Actualizando ingreso en Supabase:', id, JSON.stringify(ingreso, null, 2));
   
   const { data, error } = await supabase
-    .from('ingresos')
+    .from('pagos_evento')
     .update(ingreso)
     .eq('id', id)
     .select()
@@ -92,7 +92,7 @@ export async function deleteIngreso(context: APIContext, id: string) {
   const supabase = getSupabaseServerClient(context);
   
   const { error } = await supabase
-    .from('ingresos')
+    .from('pagos_evento')
     .delete()
     .eq('id', id);
 

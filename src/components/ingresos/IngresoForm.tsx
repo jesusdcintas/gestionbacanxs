@@ -4,7 +4,7 @@ import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
 import type { Database } from '../../types/database';
 
-type Ingreso = Database['public']['Tables']['ingresos']['Row'];
+type Ingreso = Database['public']['Tables']['pagos_evento']['Row'];
 type Evento = Database['public']['Tables']['eventos']['Row'];
 
 interface Props {
@@ -13,12 +13,16 @@ interface Props {
 }
 
 export default function IngresoForm({ ingreso, eventos }: Props) {
+  const eventoInicial = ingreso?.evento_id || eventos[0]?.id || '';
+
   const [formData, setFormData] = useState({
     concepto: ingreso?.concepto || '',
     cantidad: ingreso?.cantidad?.toString() || '',
     fecha: ingreso?.fecha || new Date().toISOString().split('T')[0],
-    evento_id: ingreso?.evento_id || '',
+    evento_id: eventoInicial,
   });
+
+  const sinEventos = eventos.length === 0;
 
   return (
     <Card>
@@ -69,21 +73,28 @@ export default function IngresoForm({ ingreso, eventos }: Props) {
 
           <div className="md:col-span-2">
             <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
-              Evento (opcional)
+              Evento
             </label>
             <select
               name="evento_id"
               value={formData.evento_id}
               onChange={(e) => setFormData({ ...formData, evento_id: e.target.value })}
+              required
+              disabled={sinEventos}
               className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
-              <option value="">Sin evento asociado</option>
+              {sinEventos && <option value="">No hay eventos disponibles</option>}
               {eventos.map((evento) => (
                 <option key={evento.id} value={evento.id}>
                   {evento.nombre} - {new Date(evento.fecha).toLocaleDateString('es-ES')}
                 </option>
               ))}
             </select>
+            {sinEventos && (
+              <p className="mt-2 text-xs text-text-secondary">
+                Crea un evento antes de registrar ingresos.
+              </p>
+            )}
           </div>
         </div>
 

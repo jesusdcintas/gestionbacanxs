@@ -216,7 +216,7 @@ export async function getBalanceData(
   const desdeIso = desde.toISOString().split('T')[0];
 
   const [ingresosRes, gastosRes] = await Promise.all([
-    supabase.from('ingresos').select('cantidad, fecha').gte('fecha', desdeIso),
+    supabase.from('pagos_evento').select('cantidad, fecha').gte('fecha', desdeIso),
     supabase.from('gastos').select('cantidad, fecha').gte('fecha', desdeIso),
   ]);
 

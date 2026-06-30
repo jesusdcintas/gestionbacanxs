@@ -15,6 +15,8 @@ const { title = 'Acceso | Gestor Bacanxs' } = Astro.props;
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <meta content={Astro.generator} name="generator" />
     <title>{title}</title>
+    <link rel="icon" type="image/png" href="/logo-bacanxs.png" />
+    <link rel="apple-touch-icon" href="/logo-bacanxs.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -26,6 +28,7 @@ const { title = 'Acceso | Gestor Bacanxs' } = Astro.props;
     <main class="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-10">
       <div class="relative z-10 w-full max-w-md">
         <div class="mb-8 text-center">
+          <img src="/logo-bacanxs.png" alt="Bacanxs" class="mx-auto mb-5 h-20 w-auto" />
           <p class="text-[11px] uppercase tracking-[0.24em] text-text-secondary">Gestión financiera</p>
           <h1 class="mt-2 text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Bacanxs</h1>
         </div>

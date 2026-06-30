@@ -41,7 +41,7 @@ export interface DashboardData {
 }
 
 type EventRow = Database['public']['Tables']['eventos']['Row'];
-type IngresoRow = Database['public']['Tables']['ingresos']['Row'];
+type IngresoRow = Database['public']['Tables']['pagos_evento']['Row'];
 type GastoRow = Database['public']['Tables']['gastos']['Row'];
 
 export async function getDashboardData(context: Parameters<typeof getSupabaseServerClient>[0]): Promise<ServiceResponse<DashboardData>> {
@@ -50,14 +50,38 @@ export async function getDashboardData(context: Parameters<typeof getSupabaseSer
     const { start, end } = getMonthRange();
     const today = getTodayIsoDate();
 
-    const [userResult, eventosResult, ingresosMonthResult, gastosMonthResult, ingresosRecentResult, gastosRecentResult, ingresosAllResult, gastosAllResult] = await Promise.all([
+    const [
+      userResult,
+      eventosResult,
+      ingresosMonthResult,
+      gastosMonthResult,
+      ingresosRecentResult,
+      gastosRecentResult,
+      ingresosAllResult,
+      gastosAllResult,
+    ] = await Promise.all([
       supabase.auth.getUser(),
-      supabase.from('eventos').select('id, nombre, fecha, lugar, cliente, presupuesto, estado').gte('fecha', today).order('fecha', { ascending: true }).limit(3),
-      supabase.from('ingresos').select('cantidad').gte('fecha', start).lte('fecha', end),
+      supabase
+        .from('eventos')
+        .select('id, nombre, fecha, lugar, cliente, presupuesto, estado')
+        .gte('fecha', today)
+        .order('fecha', { ascending: true })
+        .limit(3),
+      supabase.from('pagos_evento').select('cantidad').gte('fecha', start).lte('fecha', end),
       supabase.from('gastos').select('cantidad').gte('fecha', start).lte('fecha', end),
-      supabase.from('ingresos').select('id, concepto, cantidad, fecha').order('fecha', { ascending: false }).order('created_at', { ascending: false }).limit(5),
-      supabase.from('gastos').select('id, concepto, cantidad, categoria, fecha').order('fecha', { ascending: false }).order('created_at', { ascending: false }).limit(5),
-      supabase.from('ingresos').select('cantidad'),
+      supabase
+        .from('pagos_evento')
+        .select('id, concepto, cantidad, fecha')
+        .order('fecha', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabase
+        .from('gastos')
+        .select('id, concepto, cantidad, categoria, fecha')
+        .order('fecha', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(5),
+      supabase.from('pagos_evento').select('cantidad'),
       supabase.from('gastos').select('cantidad'),
     ]);
 
@@ -124,7 +148,7 @@ export async function getDashboardData(context: Parameters<typeof getSupabaseSer
     const recentMovements: DashboardMovement[] = [...(ingresosRecent as IngresoRow[]).map((row) => ({
       id: `ingreso-${row.id}`,
       type: 'ingreso' as const,
-      title: row.concepto,
+      title: row.concepto ?? 'Pago recibido',
       amount: Number(row.cantidad),
       formattedAmount: `+ ${new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(row.cantidad))}`,
       date: row.fecha,

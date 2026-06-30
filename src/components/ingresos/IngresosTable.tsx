@@ -4,7 +4,7 @@ import { formatDate } from '../../lib/date';
 import { Button } from '../ui/Button';
 import type { Database } from '../../types/database';
 
-type Ingreso = Database['public']['Tables']['ingresos']['Row'];
+type Ingreso = Database['public']['Tables']['pagos_evento']['Row'];
 
 interface Props {
   ingresos: (Ingreso & { eventos?: { nombre: string } | null })[];
@@ -13,8 +13,9 @@ interface Props {
 }
 
 export default function IngresosTable({ ingresos, onEdit, onDelete }: Props) {
-  const handleDelete = async (id: string, concepto: string) => {
-    if (!confirm(`¿Eliminar el ingreso "${concepto}"?`)) {
+  const handleDelete = async (id: string, concepto: string | null) => {
+    const label = concepto || 'sin concepto';
+    if (!confirm(`¿Eliminar el ingreso "${label}"?`)) {
       return;
     }
     onDelete(id);
@@ -43,7 +44,7 @@ export default function IngresosTable({ ingresos, onEdit, onDelete }: Props) {
         <tbody>
           {ingresos.map((ingreso) => (
             <tr key={ingreso.id} className="border-b border-border hover:bg-surface-hover transition-colors">
-              <td className="px-4 py-3 text-sm font-medium text-text-primary">{ingreso.concepto}</td>
+              <td className="px-4 py-3 text-sm font-medium text-text-primary">{ingreso.concepto || '—'}</td>
               <td className="px-4 py-3 text-sm text-text-secondary" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                 {formatDate(ingreso.fecha)}
               </td>

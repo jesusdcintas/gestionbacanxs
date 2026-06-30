@@ -10,12 +10,17 @@ const eventos = await getEventos(Astro);
 if (Astro.request.method === 'POST') {
   try {
     const formData = await Astro.request.formData();
+    const eventoId = formData.get('evento_id')?.toString() || '';
+
+    if (!eventoId) {
+      throw new Error('Debes seleccionar un evento para registrar el ingreso');
+    }
     
     const ingresoData = {
       concepto: formData.get('concepto')?.toString() || '',
       cantidad: parseFloat(formData.get('cantidad')?.toString() || '0'),
       fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
-      evento_id: formData.has('evento_id') && formData.get('evento_id') ? formData.get('evento_id')!.toString() : null,
+      evento_id: eventoId,
     };
 
     await createIngreso(Astro, ingresoData);
