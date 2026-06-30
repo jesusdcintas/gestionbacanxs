@@ -1,0 +1,10 @@
+---
+import { getSupabaseServerClient } from '../lib/supabase';
+
+const supabase = getSupabaseServerClient(Astro);
+const {
+  data: { session },
+} = await supabase.auth.getSession();
+
+return Astro.redirect(session ? '/dashboard' : '/login');
+---

@@ -1,0 +1,209 @@
+---
+import AppLayout from '../../../layouts/AppLayout.astro';
+import PagosEventoSection from '../../../components/eventos/PagosEventoSection.tsx';
+import RepartoSection from '../../../components/eventos/RepartoSection.tsx';
+import { Card } from '../../../components/ui/Card.tsx';
+import { StampLabel } from '../../../components/ui/StampLabel.tsx';
+import { getEventoCompleto } from '../../../services/eventos';
+import { getPagosByEvento, getTotalPagadoEvento } from '../../../services/pagos';
+import { getGastosByEvento, getTotalGastosEvento } from '../../../services/gastos';
+import { getRepartosByEvento } from '../../../services/repartos';
+import { getProfiles } from '../../../services/profiles';
+import { calcularIngresoNeto, calcularNetoRepartible } from '../../../utils/finanzas';
+
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect('/eventos');
+}
+
+let evento, pagos, gastos, repartos, socios;
+try {
+  [evento, pagos, gastos, repartos, socios] = await Promise.all([
+    getEventoCompleto(Astro, id),
+    getPagosByEvento(Astro, id),
+    getGastosByEvento(Astro, id),
+    getRepartosByEvento(Astro, id),
+    getProfiles(Astro),
+  ]);
+} catch (error) {
+  console.error('Error loading evento detalle:', error);
+  return Astro.redirect('/eventos');
+}
+
+// Cálculos financieros
+const presupuesto = Number(evento.presupuesto);
+const ingresoNeto = calcularIngresoNeto(presupuesto, evento.con_factura, Number(evento.retencion_irpf));
+const totalPagado = await getTotalPagadoEvento(Astro, id);
+const totalGastos = await getTotalGastosEvento(Astro, id);
+const netoRepartible = calcularNetoRepartible(ingresoNeto, totalGastos);
+
+// Formatear repartos para el componente
+const repartosFormateados = repartos.map(r => ({
+  socio_id: r.socio_id,
+  nombre: r.socio_id ? (r.profiles?.nombre || 'Desconocido') : 'Fondo de empresa',
+  cantidad: Number(r.cantidad),
+}));
+
+// Estados -> StampLabel variant + rotate
+const estadoStamps: Record<string, { variant: 'outline' | 'accent' | 'danger'; rotate: 'left' | 'right' }> = {
+  pendiente: { variant: 'outline', rotate: 'left' },
+  confirmado: { variant: 'accent', rotate: 'right' },
+  completado: { variant: 'outline', rotate: 'right' },
+  cancelado: { variant: 'danger', rotate: 'left' },
+};
+
+const estadoLabels: Record<string, string> = {
+  pendiente: 'Pendiente',
+  confirmado: 'Confirmado',
+  completado: 'Completado',
+  cancelado: 'Cancelado',
+};
+
+const estadoStamp = estadoStamps[evento.estado] ?? estadoStamps.pendiente;
+---
+
+<AppLayout title={evento.nombre}>
+  <div class="max-w-6xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="flex items-start justify-between">
+      <div>
+        <div class="flex items-center gap-3 mb-2">
+          <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">{evento.nombre}</h1>
+          <StampLabel variant={estadoStamp.variant} rotate={estadoStamp.rotate}>
+            {estadoLabels[evento.estado]}
+          </StampLabel>
+        </div>
+        <p class="text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">
+          {evento.fecha} {evento.lugar ? `· ${evento.lugar}` : ''}
+        </p>
+      </div>
+      <div class="flex gap-2">
+        <a href={`/eventos/${id}`} class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+          Editar evento
+        </a>
+        <a href="/eventos" class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+          ← Volver
+        </a>
+      </div>
+    </div>
+
+    <!-- Resumen financiero -->
+    <Card>
+      <StampLabel rotate="left">Resumen financiero</StampLabel>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+        <div class="p-4 bg-[#0a0a0a] border border-border">
+          <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Presupuesto</p>
+          <p class="text-2xl font-bold text-text-primary" style="font-family: 'JetBrains Mono', monospace;">{presupuesto.toFixed(2)} €</p>
+        </div>
+        <div class="p-4 bg-[#0a0a0a] border border-border">
+          <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Ingreso neto</p>
+          <p class="text-2xl font-bold text-accent" style="font-family: 'JetBrains Mono', monospace;">{ingresoNeto.toFixed(2)} €</p>
+          {evento.con_factura && (
+            <p class="text-xs text-text-secondary mt-1" style="font-family: 'JetBrains Mono', monospace;">
+              Retención IRPF: −{(presupuesto - ingresoNeto).toFixed(2)} €
+            </p>
+          )}
+        </div>
+        <div class="p-4 bg-[#0a0a0a] border border-border">
+          <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Total pagado</p>
+          <p class="text-2xl font-bold text-text-primary" style="font-family: 'JetBrains Mono', monospace;">{totalPagado.toFixed(2)} €</p>
+          <p class="text-xs text-text-secondary mt-1" style="font-family: 'JetBrains Mono', monospace;">
+            Pendiente: {(presupuesto - totalPagado).toFixed(2)} €
+          </p>
+        </div>
+        <div class="p-4 bg-[#0a0a0a] border border-border">
+          <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Neto repartible</p>
+          <p class={`text-2xl font-bold ${netoRepartible >= 0 ? 'text-accent' : 'text-danger'}`} style="font-family: 'JetBrains Mono', monospace;">
+            {netoRepartible.toFixed(2)} €
+          </p>
+          <p class="text-xs text-text-secondary mt-1" style="font-family: 'JetBrains Mono', monospace;">
+            Gastos: −{totalGastos.toFixed(2)} €
+          </p>
+        </div>
+      </div>
+    </Card>
+
+    <!-- Información del evento -->
+    {(evento.cliente || evento.observaciones) && (
+      <Card>
+        <StampLabel rotate="right">Información adicional</StampLabel>
+        <div class="space-y-2 text-sm mt-3">
+          {evento.cliente && (
+            <div>
+              <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Cliente:</span>
+              <span class="ml-2 text-text-primary">{evento.cliente}</span>
+            </div>
+          )}
+          {evento.observaciones && (
+            <div>
+              <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Observaciones:</span>
+              <p class="mt-1 text-text-primary">{evento.observaciones}</p>
+            </div>
+          )}
+        </div>
+      </Card>
+    )}
+
+    <!-- Pagos recibidos -->
+    <PagosEventoSection
+      eventoId={id}
+      pagos={pagos}
+      client:load
+    />
+
+    <!-- Gastos del evento -->
+    <Card>
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <StampLabel rotate="left">Gastos del evento</StampLabel>
+          <p class="mt-2 text-sm text-text-secondary">
+            Total: <span class="font-semibold text-danger" style="font-family: 'JetBrains Mono', monospace;">−{totalGastos.toFixed(2)} €</span>
+          </p>
+        </div>
+        <a
+          href={`/gastos/nuevo?evento=${id}`}
+          class="px-3 py-1.5 bg-accent hover:bg-accent-hover text-[#0a0a0a] text-sm font-bold transition-colors"
+        >
+          + Añadir gasto
+        </a>
+      </div>
+
+      {gastos.length === 0 ? (
+        <p class="text-sm text-text-secondary text-center py-8">
+          No hay gastos asociados a este evento
+        </p>
+      ) : (
+        <div class="space-y-2">
+          {gastos.map((gasto) => (
+            <div class="flex items-center justify-between p-3 bg-[#0a0a0a] border border-border hover:border-border-strong transition-colors">
+              <div class="flex-1">
+                <p class="font-medium text-text-primary">{gasto.concepto}</p>
+                <div class="flex items-center gap-3 mt-1">
+                  <span class="text-xs text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">{gasto.fecha}</span>
+                  <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">{gasto.categoria}</span>
+                  {gasto.profiles && (
+                    <span class="text-[11px] uppercase tracking-[0.08em] text-text-primary">
+                      Pagado por: {gasto.profiles.nombre}
+                      {gasto.reembolsado && ' (reembolsado)'}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <span class="font-semibold text-danger" style="font-family: 'JetBrains Mono', monospace;">−{Number(gasto.cantidad).toFixed(2)} €</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+
+    <!-- Reparto del neto -->
+    <RepartoSection
+      eventoId={id}
+      socios={socios}
+      repartosIniciales={repartosFormateados}
+      netoRepartible={netoRepartible}
+      client:load
+    />
+  </div>
+</AppLayout>

@@ -1,0 +1,43 @@
+---
+import { Button } from '../components/ui/Button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
+import AppLayout from '../layouts/AppLayout.astro';
+import { getSupabaseServerClient } from '../lib/supabase';
+
+const supabase = getSupabaseServerClient(Astro);
+const {
+  data: { user },
+} = await supabase.auth.getUser();
+
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+const displayName = user.email ? user.email.split('@')[0] : 'Usuario';
+---
+
+<AppLayout title="Perfil | Gestor Bacanxs" userName={displayName}>
+  <Card className="max-w-2xl">
+    <CardHeader>
+      <CardTitle>Perfil</CardTitle>
+      <CardDescription>Datos de la cuenta autenticada en Supabase.</CardDescription>
+    </CardHeader>
+    <CardContent>
+      <dl class="space-y-3 text-sm text-text-primary">
+        <div>
+          <dt class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Nombre mostrado</dt>
+          <dd>{displayName}</dd>
+        </div>
+        <div>
+          <dt class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Correo</dt>
+          <dd style="font-family: 'JetBrains Mono', monospace;">{user.email ?? 'No disponible'}</dd>
+        </div>
+      </dl>
+      <form class="mt-6" method="post">
+        <Button formAction="/auth/signout" formMethod="post" variant="secondary">
+          Cerrar sesión
+        </Button>
+      </form>
+    </CardContent>
+  </Card>
+</AppLayout>

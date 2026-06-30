@@ -1,0 +1,38 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import IngresoForm from '../../components/ingresos/IngresoForm.tsx';
+import { createIngreso } from '../../services/ingresos';
+import { getEventos } from '../../services/eventos';
+
+const eventos = await getEventos(Astro);
+
+// Handle form submission
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    
+    const ingresoData = {
+      concepto: formData.get('concepto')?.toString() || '',
+      cantidad: parseFloat(formData.get('cantidad')?.toString() || '0'),
+      fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
+      evento_id: formData.has('evento_id') && formData.get('evento_id') ? formData.get('evento_id')!.toString() : null,
+    };
+
+    await createIngreso(Astro, ingresoData);
+    return Astro.redirect('/ingresos');
+  } catch (error) {
+    console.error('Error creating ingreso:', error);
+  }
+}
+---
+
+<AppLayout title="Nuevo Ingreso">
+  <div class="max-w-3xl mx-auto space-y-6">
+    <div>
+      <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Nuevo ingreso</h1>
+      <p class="text-text-secondary mt-1">Registra una entrada de dinero</p>
+    </div>
+
+    <IngresoForm eventos={eventos} client:load />
+  </div>
+</AppLayout>

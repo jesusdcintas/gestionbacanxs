@@ -1,0 +1,59 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import IngresoForm from '../../components/ingresos/IngresoForm.tsx';
+import { getIngreso, updateIngreso } from '../../services/ingresos';
+import { getEventos } from '../../services/eventos';
+
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect('/ingresos');
+}
+
+let ingreso;
+try {
+  ingreso = await getIngreso(Astro, id);
+} catch (error) {
+  console.error('Error loading ingreso:', error);
+  return Astro.redirect('/ingresos');
+}
+
+const eventos = await getEventos(Astro);
+
+// Handle form submission
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    
+    const ingresoData = {
+      concepto: formData.get('concepto')?.toString() || '',
+      cantidad: parseFloat(formData.get('cantidad')?.toString() || '0'),
+      fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
+      evento_id: formData.has('evento_id') && formData.get('evento_id') ? formData.get('evento_id')!.toString() : null,
+    };
+
+    console.log('Datos del ingreso a actualizar:', JSON.stringify(ingresoData, null, 2));
+    
+    await updateIngreso(Astro, id, ingresoData);
+    return Astro.redirect('/ingresos');
+  } catch (error) {
+    console.error('Error updating ingreso:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    return new Response(
+      `<html><body><h1>Error al actualizar ingreso</h1><pre>${errorMessage}</pre><a href="/ingresos/${id}">Volver</a></body></html>`,
+      { status: 500, headers: { 'Content-Type': 'text/html' } }
+    );
+  }
+}
+---
+
+<AppLayout title={`Editar ${ingreso.concepto}`}>
+  <div class="max-w-3xl mx-auto space-y-6">
+    <div>
+      <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Editar ingreso</h1>
+      <p class="text-text-secondary mt-1">Modifica los detalles del ingreso</p>
+    </div>
+
+    <IngresoForm ingreso={ingreso} eventos={eventos} client:load />
+  </div>
+</AppLayout>

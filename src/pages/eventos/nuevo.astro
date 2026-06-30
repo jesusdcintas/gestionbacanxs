@@ -1,0 +1,48 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import EventoForm from '../../components/eventos/EventoForm.tsx';
+import { createEvento } from '../../services/eventos';
+
+// Handle form submission
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    
+    const eventoData = {
+      nombre: formData.get('nombre')?.toString() || '',
+      fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
+      lugar: formData.has('lugar') && formData.get('lugar') ? formData.get('lugar')!.toString() : null,
+      cliente: formData.has('cliente') && formData.get('cliente') ? formData.get('cliente')!.toString() : null,
+      presupuesto: parseFloat(formData.get('presupuesto')?.toString() || '0'),
+      con_factura: formData.get('con_factura') === 'true',
+      retencion_irpf: parseFloat(formData.get('retencion_irpf')?.toString() || '20.00'),
+      estado: (formData.get('estado')?.toString() || 'pendiente') as 'pendiente' | 'confirmado' | 'completado' | 'cancelado',
+      observaciones: formData.has('observaciones') && formData.get('observaciones') ? formData.get('observaciones')!.toString() : null,
+    };
+
+    console.log('Datos del evento a crear:', JSON.stringify(eventoData, null, 2));
+    
+    await createEvento(Astro, eventoData);
+    return Astro.redirect('/eventos');
+  } catch (error) {
+    console.error('Error creating evento:', error);
+    // Mostrar el error al usuario
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    return new Response(
+      `<html><body><h1>Error al crear evento</h1><pre>${errorMessage}</pre><a href="/eventos/nuevo">Volver</a></body></html>`,
+      { status: 500, headers: { 'Content-Type': 'text/html' } }
+    );
+  }
+}
+---
+
+<AppLayout title="Nuevo Evento">
+  <div class="max-w-3xl mx-auto space-y-6">
+    <div>
+      <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Nuevo evento</h1>
+      <p class="text-text-secondary mt-1">Registra un nuevo concierto o actuación</p>
+    </div>
+
+    <EventoForm client:load />
+  </div>
+</AppLayout>

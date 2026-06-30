@@ -1,0 +1,173 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import GastosTable from '../../components/gastos/GastosTable.tsx';
+import { Button } from '../../components/ui/Button.tsx';
+import { Card, CardContent } from '../../components/ui/Card.tsx';
+import { StampLabel } from '../../components/ui/StampLabel.tsx';
+import { Plus } from 'lucide-react';
+import { getGastos, deleteGasto } from '../../services/gastos';
+
+// Handle delete action ANTES de la query (para que el redirect funcione)
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('action');
+  const id = formData.get('id');
+
+  if (action === 'delete' && id) {
+    try {
+      await deleteGasto(Astro, id.toString());
+      return Astro.redirect(Astro.url.pathname + Astro.url.search);
+    } catch (error) {
+      console.error('Error deleting gasto:', error);
+    }
+  }
+}
+
+type Filtro = 'todos' | 'generales' | 'eventos';
+const filtroRaw = Astro.url.searchParams.get('filtro') ?? 'todos';
+const filtro: Filtro = (['todos', 'generales', 'eventos'] as Filtro[]).includes(
+  filtroRaw as Filtro,
+)
+  ? (filtroRaw as Filtro)
+  : 'todos';
+
+const todos = await getGastos(Astro);
+const generales = todos.filter((g) => g.evento_id === null);
+const deEventos = todos.filter((g) => g.evento_id !== null);
+
+const gastos =
+  filtro === 'generales' ? generales : filtro === 'eventos' ? deEventos : todos;
+
+const sumar = (arr: { cantidad: number }[]) =>
+  arr.reduce((sum, g) => sum + Number(g.cantidad), 0);
+
+const totalAll = sumar(todos);
+const totalGenerales = sumar(generales);
+const totalEventos = sumar(deEventos);
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+
+const tabs: { value: Filtro; label: string; count: number }[] = [
+  { value: 'todos', label: 'Todos', count: todos.length },
+  { value: 'generales', label: 'Generales', count: generales.length },
+  { value: 'eventos', label: 'De eventos', count: deEventos.length },
+];
+
+const emptyMessages: Record<Filtro, string> = {
+  todos: 'No hay gastos registrados. Crea tu primer gasto.',
+  generales: 'No hay gastos generales (sin evento asociado).',
+  eventos: 'No hay gastos asociados a eventos.',
+};
+---
+
+<AppLayout title="Gastos">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <p class="text-[11px] uppercase tracking-[0.24em] text-text-secondary">Gastos</p>
+        <h1
+          class="mt-2 text-3xl uppercase italic"
+          style="font-family: 'Archivo Black', sans-serif;"
+        >
+          Gastos
+        </h1>
+        <p class="text-text-secondary mt-1">Registra y filtra tus salidas de dinero.</p>
+      </div>
+      <a href="/gastos/nuevo">
+        <Button variant="primary" client:load>
+          <Plus size={20} />
+          Nuevo Gasto
+        </Button>
+      </a>
+    </div>
+
+    <!-- Métricas -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="border border-border bg-surface p-5">
+        <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Total gastos</p>
+        <p
+          class="mt-2 text-2xl font-semibold text-danger"
+          style="font-family: 'JetBrains Mono', monospace;"
+        >
+          −{formatCurrency(totalAll)}
+        </p>
+        <p class="mt-1 text-[11px] text-text-secondary">{todos.length} movimientos</p>
+      </div>
+      <div class="border border-border bg-surface p-5">
+        <div class="flex items-center justify-between">
+          <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Generales</p>
+          <StampLabel rotate="none" variant="outline">Sin evento</StampLabel>
+        </div>
+        <p
+          class="mt-2 text-2xl font-semibold text-text-primary"
+          style="font-family: 'JetBrains Mono', monospace;"
+        >
+          −{formatCurrency(totalGenerales)}
+        </p>
+        <p class="mt-1 text-[11px] text-text-secondary">{generales.length} movimientos</p>
+      </div>
+      <div class="border border-border bg-surface p-5">
+        <div class="flex items-center justify-between">
+          <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">De eventos</p>
+          <StampLabel rotate="none" variant="outline">Asignados</StampLabel>
+        </div>
+        <p
+          class="mt-2 text-2xl font-semibold text-text-primary"
+          style="font-family: 'JetBrains Mono', monospace;"
+        >
+          −{formatCurrency(totalEventos)}
+        </p>
+        <p class="mt-1 text-[11px] text-text-secondary">{deEventos.length} movimientos</p>
+      </div>
+    </div>
+
+    <!-- Tabs de filtro -->
+    <div class="flex gap-1 border-b border-border">
+      {tabs.map((t) => {
+        const activo = t.value === filtro;
+        return (
+          <a
+            href={`/gastos?filtro=${t.value}`}
+            class={`px-4 py-2 text-[11px] uppercase tracking-[0.08em] border-b-2 transition-colors ${
+              activo
+                ? 'border-accent text-accent'
+                : 'border-transparent text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {t.label}
+            <span
+              class="ml-2 text-[10px]"
+              style="font-family: 'JetBrains Mono', monospace;"
+            >
+              ({t.count})
+            </span>
+          </a>
+        );
+      })}
+    </div>
+
+    <Card>
+      <CardContent>
+        <GastosTable
+          gastos={gastos}
+          emptyMessage={emptyMessages[filtro]}
+          onEdit={(id) => {
+            window.location.href = `/gastos/${id}`;
+          }}
+          onDelete={(id) => {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.innerHTML = `
+              <input type="hidden" name="action" value="delete" />
+              <input type="hidden" name="id" value="${id}" />
+            `;
+            document.body.appendChild(form);
+            form.submit();
+          }}
+          client:load
+        />
+      </CardContent>
+    </Card>
+  </div>
+</AppLayout>

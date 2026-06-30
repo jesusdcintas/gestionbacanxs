@@ -1,0 +1,63 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import IngresosTable from '../../components/ingresos/IngresosTable.tsx';
+import { Button } from '../../components/ui/Button.tsx';
+import { Card } from '../../components/ui/Card.tsx';
+import { Plus } from 'lucide-react';
+import { getIngresos, deleteIngreso } from '../../services/ingresos';
+
+const ingresos = await getIngresos(Astro);
+
+// Handle delete action
+if (Astro.request.method === 'POST') {
+  const formData = await Astro.request.formData();
+  const action = formData.get('action');
+  const id = formData.get('id');
+
+  if (action === 'delete' && id) {
+    try {
+      await deleteIngreso(Astro, id.toString());
+      return Astro.redirect('/ingresos');
+    } catch (error) {
+      console.error('Error deleting ingreso:', error);
+    }
+  }
+}
+---
+
+<AppLayout title="Ingresos">
+  <div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div>
+        <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Ingresos</h1>
+        <p class="text-text-secondary mt-1">Registra tus entradas de dinero</p>
+      </div>
+      <a href="/ingresos/nuevo">
+        <Button variant="primary" client:load>
+          <Plus size={20} />
+          Nuevo Ingreso
+        </Button>
+      </a>
+    </div>
+
+    <Card>
+      <IngresosTable
+        ingresos={ingresos}
+        onEdit={(id) => {
+          window.location.href = `/ingresos/${id}`;
+        }}
+        onDelete={(id) => {
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.innerHTML = `
+            <input type="hidden" name="action" value="delete" />
+            <input type="hidden" name="id" value="${id}" />
+          `;
+          document.body.appendChild(form);
+          form.submit();
+        }}
+        client:load
+      />
+    </Card>
+  </div>
+</AppLayout>

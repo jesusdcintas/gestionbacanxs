@@ -1,0 +1,39 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import GastoForm from '../../components/gastos/GastoForm.tsx';
+import { createGasto } from '../../services/gastos';
+import { getEventos } from '../../services/eventos';
+
+const eventos = await getEventos(Astro);
+
+// Handle form submission
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    
+    const gastoData = {
+      concepto: formData.get('concepto')?.toString() || '',
+      cantidad: parseFloat(formData.get('cantidad')?.toString() || '0'),
+      categoria: formData.get('categoria')?.toString() || 'Otros',
+      fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
+      evento_id: formData.has('evento_id') && formData.get('evento_id') ? formData.get('evento_id')!.toString() : null,
+    };
+
+    await createGasto(Astro, gastoData);
+    return Astro.redirect('/gastos');
+  } catch (error) {
+    console.error('Error creating gasto:', error);
+  }
+}
+---
+
+<AppLayout title="Nuevo Gasto">
+  <div class="max-w-3xl mx-auto space-y-6">
+    <div>
+      <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Nuevo gasto</h1>
+      <p class="text-text-secondary mt-1">Registra una salida de dinero</p>
+    </div>
+
+    <GastoForm eventos={eventos} client:load />
+  </div>
+</AppLayout>

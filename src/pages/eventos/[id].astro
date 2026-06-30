@@ -1,0 +1,61 @@
+---
+import AppLayout from '../../layouts/AppLayout.astro';
+import EventoForm from '../../components/eventos/EventoForm.tsx';
+import { getEvento, updateEvento } from '../../services/eventos';
+
+const { id } = Astro.params;
+
+if (!id) {
+  return Astro.redirect('/eventos');
+}
+
+let evento;
+try {
+  evento = await getEvento(Astro, id);
+} catch (error) {
+  console.error('Error loading evento:', error);
+  return Astro.redirect('/eventos');
+}
+
+// Handle form submission
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    
+    const eventoData = {
+      nombre: formData.get('nombre')?.toString() || '',
+      fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
+      lugar: formData.has('lugar') && formData.get('lugar') ? formData.get('lugar')!.toString() : null,
+      cliente: formData.has('cliente') && formData.get('cliente') ? formData.get('cliente')!.toString() : null,
+      presupuesto: parseFloat(formData.get('presupuesto')?.toString() || '0'),
+      con_factura: formData.get('con_factura') === 'true',
+      retencion_irpf: parseFloat(formData.get('retencion_irpf')?.toString() || '20.00'),
+      estado: (formData.get('estado')?.toString() || 'pendiente') as 'pendiente' | 'confirmado' | 'completado' | 'cancelado',
+      observaciones: formData.has('observaciones') && formData.get('observaciones') ? formData.get('observaciones')!.toString() : null,
+    };
+
+    console.log('Datos del evento a actualizar:', JSON.stringify(eventoData, null, 2));
+    
+    await updateEvento(Astro, id, eventoData);
+    return Astro.redirect('/eventos');
+  } catch (error) {
+    console.error('Error updating evento:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    return new Response(
+      `<html><body><h1>Error al actualizar evento</h1><pre>${errorMessage}</pre><a href="/eventos/${id}">Volver</a></body></html>`,
+      { status: 500, headers: { 'Content-Type': 'text/html' } }
+    );
+  }
+}
+---
+
+<AppLayout title={`Editar ${evento.nombre}`}>
+  <div class="max-w-3xl mx-auto space-y-6">
+    <div>
+      <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Editar evento</h1>
+      <p class="text-text-secondary mt-1">Modifica los detalles del evento</p>
+    </div>
+
+    <EventoForm evento={evento} client:load />
+  </div>
+</AppLayout>

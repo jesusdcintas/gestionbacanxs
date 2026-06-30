@@ -1,0 +1,18 @@
+---
+import { LoginForm } from '../components/auth/LoginForm';
+import AuthLayout from '../layouts/AuthLayout.astro';
+import { getSupabaseServerClient } from '../lib/supabase';
+
+const supabase = getSupabaseServerClient(Astro);
+const {
+  data: { session },
+} = await supabase.auth.getSession();
+
+if (session) {
+  return Astro.redirect('/dashboard');
+}
+---
+
+<AuthLayout title="Login | Gestor Bacanxs">
+  <LoginForm client:load />
+</AuthLayout>

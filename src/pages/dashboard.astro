@@ -1,0 +1,59 @@
+---
+import { MetricCard } from '../components/dashboard/MetricCard';
+import { RecentMovements } from '../components/dashboard/RecentMovements';
+import { UpcomingEvents } from '../components/dashboard/UpcomingEvents';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card';
+import AppLayout from '../layouts/AppLayout.astro';
+import { getDashboardData } from '../services/dashboard';
+
+const { data, error } = await getDashboardData(Astro);
+---
+
+<AppLayout title="Dashboard | Gestor Bacanxs" userName={data?.userName ?? 'Usuario'}>
+  {error ? (
+    <Card>
+      <CardHeader>
+        <CardTitle>Error al cargar el dashboard</CardTitle>
+        <CardDescription>Hubo un problema leyendo los datos desde Supabase.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <p class="text-sm text-danger">{error}</p>
+      </CardContent>
+    </Card>
+  ) : (
+    <div class="space-y-6">
+      <section>
+        <div class="mb-6">
+          <p class="text-[11px] uppercase tracking-[0.24em] text-text-secondary">Resumen mensual</p>
+          <h2 class="mt-2 text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">
+            Visión general
+          </h2>
+          <p class="mt-2 text-sm text-text-secondary">Métricas calculadas en SSR con datos reales de Supabase.</p>
+        </div>
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {data?.metrics.map((metric, i) => <MetricCard metric={metric} tilt={i === 1 ? 'left' : i === 3 ? 'right' : 'none'} />)}
+        </div>
+      </section>
+
+      <section class="grid gap-4 xl:grid-cols-2">
+        <UpcomingEvents events={data?.upcomingEvents ?? []} />
+        <RecentMovements movements={data?.recentMovements ?? []} />
+      </section>
+
+      <section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Sesión activa</CardTitle>
+            <CardDescription>El acceso está resolviéndose con Supabase Auth + SSR.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p class="text-sm text-text-primary">
+              Usuario identificado:
+              <span class="ml-2 border border-border bg-surface px-2 py-1 text-accent" style="font-family: 'JetBrains Mono', monospace;">{data?.userName ?? 'Usuario'}</span>
+            </p>
+          </CardContent>
+        </Card>
+      </section>
+    </div>
+  )}
+</AppLayout>

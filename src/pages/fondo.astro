@@ -1,0 +1,142 @@
+---
+import AppLayout from '../layouts/AppLayout.astro';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card.tsx';
+import { StampLabel } from '../components/ui/StampLabel.tsx';
+import FondoChart from '../components/fondo/FondoChart.tsx';
+import FondoMovimientosList from '../components/fondo/FondoMovimientosList.tsx';
+import MovimientoFondoForm from '../components/fondo/MovimientoFondoForm.tsx';
+import { getMovimientosFondo, getSaldoFondo, getHistoricoSaldosFondo } from '../services/fondo';
+
+let saldo = 0;
+let movimientos: Awaited<ReturnType<typeof getMovimientosFondo>> = [];
+let historico: { mes: string; saldo: number }[] = [];
+let error: string | null = null;
+
+try {
+  [saldo, movimientos, historico] = await Promise.all([
+    getSaldoFondo(Astro),
+    getMovimientosFondo(Astro),
+    getHistoricoSaldosFondo(Astro, 12),
+  ]);
+  historico = [...historico].reverse();
+} catch (err) {
+  error = err instanceof Error ? err.message : 'Error al cargar el fondo';
+}
+
+const totalEntradas = movimientos
+  .filter((m) => Number(m.cantidad) > 0)
+  .reduce((sum, m) => sum + Number(m.cantidad), 0);
+const totalSalidas = movimientos
+  .filter((m) => Number(m.cantidad) < 0)
+  .reduce((sum, m) => sum + Math.abs(Number(m.cantidad)), 0);
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
+---
+
+<AppLayout title="Fondo de empresa | Gestor Bacanxs">
+  <div class="space-y-6">
+    <div>
+      <p class="text-[11px] uppercase tracking-[0.24em] text-text-secondary">Caja común</p>
+      <h1 class="mt-2 text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">
+        Fondo de empresa
+      </h1>
+      <p class="mt-2 text-sm text-text-secondary">
+        Caja común del colectivo. Acumula la parte del neto repartible asignada al fondo y financia los gastos y reembolsos a socios.
+      </p>
+    </div>
+
+    {error && (
+      <Card>
+        <CardContent>
+          <p class="text-sm text-danger">{error}</p>
+        </CardContent>
+      </Card>
+    )}
+
+    <section class="grid gap-4 md:grid-cols-3">
+      <Card tilt="left">
+        <CardHeader className="pb-3! border-b! border-border!">
+          <CardDescription className="text-[11px] uppercase tracking-[0.08em]">Saldo actual</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p
+            class={`text-3xl tracking-tight ${saldo >= 0 ? 'text-accent' : 'text-danger'}`}
+            style="font-family: 'JetBrains Mono', monospace;"
+          >
+            {formatCurrency(saldo)}
+          </p>
+          <p class="mt-2 text-xs text-text-secondary">Disponible en la caja común.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3! border-b! border-border!">
+          <CardDescription className="text-[11px] uppercase tracking-[0.08em]">Total entradas</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p
+            class="text-3xl tracking-tight text-text-primary"
+            style="font-family: 'JetBrains Mono', monospace;"
+          >
+            +{formatCurrency(totalEntradas)}
+          </p>
+          <p class="mt-2 text-xs text-text-secondary">Aportes y repartos hacia el fondo.</p>
+        </CardContent>
+      </Card>
+
+      <Card tilt="right">
+        <CardHeader className="pb-3! border-b! border-border!">
+          <CardDescription className="text-[11px] uppercase tracking-[0.08em]">Total salidas</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p
+            class="text-3xl tracking-tight text-danger"
+            style="font-family: 'JetBrains Mono', monospace;"
+          >
+            −{formatCurrency(totalSalidas)}
+          </p>
+          <p class="mt-2 text-xs text-text-secondary">Reembolsos y gastos pagados desde el fondo.</p>
+        </CardContent>
+      </Card>
+    </section>
+
+    <Card>
+      <CardHeader>
+        <StampLabel rotate="left">Evolución del saldo</StampLabel>
+        <CardTitle className="mt-3">Saldo histórico mes a mes</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <FondoChart data={historico} client:load />
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <CardTitle>Registrar movimiento manual</CardTitle>
+        <CardDescription className="mt-1">
+          Usa este formulario para reflejar aportes o pagos puntuales no vinculados a un evento.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <MovimientoFondoForm client:load />
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader>
+        <StampLabel rotate="right">Movimientos</StampLabel>
+        <CardTitle className="mt-3">Histórico de movimientos</CardTitle>
+        <CardDescription className="mt-1">
+          Detalle cronológico de entradas y salidas del fondo. Solo los movimientos manuales pueden eliminarse.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <FondoMovimientosList
+          movimientos={movimientos as any}
+          client:load
+        />
+      </CardContent>
+    </Card>
+  </div>
+</AppLayout>
