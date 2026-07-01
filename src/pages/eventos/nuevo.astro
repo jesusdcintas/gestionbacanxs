@@ -2,13 +2,14 @@
 import AppLayout from '../../layouts/AppLayout.astro';
 import EventoForm from '../../components/eventos/EventoForm.tsx';
 import { createEvento } from '../../services/eventos';
+import type { Database } from '../../types/database';
 
 // Handle form submission
 if (Astro.request.method === 'POST') {
   try {
     const formData = await Astro.request.formData();
-    
-    const eventoData = {
+
+    const eventoData: Database['public']['Tables']['eventos']['Insert'] = {
       nombre: formData.get('nombre')?.toString() || '',
       fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
       lugar: formData.has('lugar') && formData.get('lugar') ? formData.get('lugar')!.toString() : null,
@@ -16,21 +17,24 @@ if (Astro.request.method === 'POST') {
       presupuesto: parseFloat(formData.get('presupuesto')?.toString() || '0'),
       con_factura: formData.get('con_factura') === 'true',
       retencion_irpf: parseFloat(formData.get('retencion_irpf')?.toString() || '20.00'),
-      estado: (formData.get('estado')?.toString() || 'pendiente') as 'pendiente' | 'confirmado' | 'completado' | 'cancelado',
-      observaciones: formData.has('observaciones') && formData.get('observaciones') ? formData.get('observaciones')!.toString() : null,
+      estado_financiero:
+        (formData.get('estado_financiero')?.toString() || 'no_pagado') as Database['public']['Tables']['eventos']['Row']['estado_financiero'],
+      estado_trabajo:
+        (formData.get('estado_trabajo')?.toString() || 'confirmado') as Database['public']['Tables']['eventos']['Row']['estado_trabajo'],
+      observaciones:
+        formData.has('observaciones') && formData.get('observaciones')
+          ? formData.get('observaciones')!.toString()
+          : null,
     };
 
-    console.log('Datos del evento a crear:', JSON.stringify(eventoData, null, 2));
-    
     await createEvento(Astro, eventoData);
     return Astro.redirect('/eventos');
   } catch (error) {
     console.error('Error creating evento:', error);
-    // Mostrar el error al usuario
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
     return new Response(
       `<html><body><h1>Error al crear evento</h1><pre>${errorMessage}</pre><a href="/eventos/nuevo">Volver</a></body></html>`,
-      { status: 500, headers: { 'Content-Type': 'text/html' } }
+      { status: 500, headers: { 'Content-Type': 'text/html' } },
     );
   }
 }

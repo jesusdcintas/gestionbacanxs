@@ -8,11 +8,8 @@ type EventoUpdate = Database['public']['Tables']['eventos']['Update'];
 
 export async function getEventos(context: APIContext) {
   const supabase = getSupabaseServerClient(context);
-  
-  const { data, error } = await supabase
-    .from('eventos')
-    .select('*')
-    .order('fecha', { ascending: false });
+
+  const { data, error } = await supabase.from('eventos').select('*').order('fecha', { ascending: false });
 
   if (error) {
     console.error('Error fetching eventos:', error);
@@ -24,12 +21,8 @@ export async function getEventos(context: APIContext) {
 
 export async function getEvento(context: APIContext, id: string) {
   const supabase = getSupabaseServerClient(context);
-  
-  const { data, error } = await supabase
-    .from('eventos')
-    .select('*')
-    .eq('id', id)
-    .single();
+
+  const { data, error } = await supabase.from('eventos').select('*').eq('id', id).single();
 
   if (error) {
     console.error('Error fetching evento:', error);
@@ -41,66 +34,43 @@ export async function getEvento(context: APIContext, id: string) {
 
 export async function createEvento(context: APIContext, evento: EventoInsert) {
   const supabase = getSupabaseServerClient(context);
-  
-  // Obtener el usuario actual
-  const { data: { user } } = await supabase.auth.getUser();
-  
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
   const eventoData = {
     ...evento,
     created_by: user?.id || null,
   };
-  
-  console.log('Insertando evento en Supabase:', JSON.stringify(eventoData, null, 2));
-  
-  const { data, error } = await supabase
-    .from('eventos')
-    .insert(eventoData)
-    .select()
-    .single();
+
+  const { data, error } = await supabase.from('eventos').insert(eventoData).select().single();
 
   if (error) {
     console.error('Error de Supabase al crear evento:', error);
-    console.error('Código de error:', error.code);
-    console.error('Mensaje:', error.message);
-    console.error('Detalles:', error.details);
     throw new Error(`No se pudo crear el evento: ${error.message} (${error.code})`);
   }
 
-  console.log('Evento creado exitosamente:', data);
   return data as Evento;
 }
 
 export async function updateEvento(context: APIContext, id: string, evento: EventoUpdate) {
   const supabase = getSupabaseServerClient(context);
-  
-  console.log('Actualizando evento en Supabase:', id, JSON.stringify(evento, null, 2));
-  
-  const { data, error } = await supabase
-    .from('eventos')
-    .update(evento)
-    .eq('id', id)
-    .select()
-    .single();
+
+  const { data, error } = await supabase.from('eventos').update(evento).eq('id', id).select().single();
 
   if (error) {
     console.error('Error de Supabase al actualizar evento:', error);
-    console.error('Código de error:', error.code);
-    console.error('Mensaje:', error.message);
-    console.error('Detalles:', error.details);
     throw new Error(`No se pudo actualizar el evento: ${error.message} (${error.code})`);
   }
 
-  console.log('Evento actualizado exitosamente:', data);
   return data as Evento;
 }
 
 export async function deleteEvento(context: APIContext, id: string) {
   const supabase = getSupabaseServerClient(context);
-  
-  const { error } = await supabase
-    .from('eventos')
-    .delete()
-    .eq('id', id);
+
+  const { error } = await supabase.from('eventos').delete().eq('id', id);
 
   if (error) {
     console.error('Error deleting evento:', error);
@@ -108,14 +78,9 @@ export async function deleteEvento(context: APIContext, id: string) {
   }
 }
 
-/**
- * Obtiene un evento completo con toda su información relacionada
- * Incluye: pagos recibidos, gastos, repartos y cálculos financieros
- */
 export async function getEventoCompleto(context: APIContext, id: string) {
   const supabase = getSupabaseServerClient(context);
-  
-  // Obtener evento con pagos, gastos y repartos en una sola query
+
   const { data, error } = await supabase
     .from('eventos')
     .select(`
@@ -135,13 +100,14 @@ export async function getEventoCompleto(context: APIContext, id: string) {
   return data;
 }
 
-/**
- * Cambia el estado de un evento
- */
 export async function cambiarEstadoEvento(
   context: APIContext,
   id: string,
-  estado: 'pendiente' | 'confirmado' | 'completado' | 'cancelado'
+  estadoFinanciero: Database['public']['Tables']['eventos']['Row']['estado_financiero'],
+  estadoTrabajo: Database['public']['Tables']['eventos']['Row']['estado_trabajo'],
 ) {
-  return updateEvento(context, id, { estado });
+  return updateEvento(context, id, {
+    estado_financiero: estadoFinanciero,
+    estado_trabajo: estadoTrabajo,
+  });
 }

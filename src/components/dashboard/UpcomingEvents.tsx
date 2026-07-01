@@ -3,6 +3,7 @@ import type { DashboardEvent } from '../../services/dashboard';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/Card';
 import { StampLabel } from '../ui/StampLabel';
 import { formatDate } from '../../utils/format';
+import { getEstadoStamp, getEstadoVisibleLabel } from '../../utils/eventoEstado';
 
 interface UpcomingEventsProps {
   events: DashboardEvent[];
@@ -20,19 +21,7 @@ export function UpcomingEvents({ events }: UpcomingEventsProps) {
         {events.length > 0 ? (
           <ul className="space-y-3">
             {events.map((event) => {
-              const estadoStamps: Record<DashboardEvent['estado'], { variant: 'outline' | 'accent' | 'danger'; rotate: 'left' | 'right' }> = {
-                pendiente: { variant: 'outline', rotate: 'left' },
-                confirmado: { variant: 'accent', rotate: 'right' },
-                completado: { variant: 'outline', rotate: 'right' },
-                cancelado: { variant: 'danger', rotate: 'left' },
-              };
-              const estadoLabels: Record<DashboardEvent['estado'], string> = {
-                pendiente: 'Pendiente',
-                confirmado: 'Confirmado',
-                completado: 'Completado',
-                cancelado: 'Cancelado',
-              };
-              const stamp = estadoStamps[event.estado] ?? estadoStamps.pendiente;
+              const stamp = getEstadoStamp(event.estado_completo);
 
               return (
                 <li className="border border-border bg-[#0a0a0a] p-4" key={event.id}>
@@ -55,15 +44,19 @@ export function UpcomingEvents({ events }: UpcomingEventsProps) {
                       </div>
                     </div>
                     <StampLabel variant={stamp.variant} rotate={stamp.rotate}>
-                      {estadoLabels[event.estado] ?? 'Pendiente'}
+                      {getEstadoVisibleLabel(event.estado_completo)}
                     </StampLabel>
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-text-secondary">
-                    <span>Cliente: <span className="text-text-primary">{event.cliente ?? 'Sin cliente'}</span></span>
+                    <span>
+                      Cliente: <span className="text-text-primary">{event.cliente ?? 'Sin cliente'}</span>
+                    </span>
                     <span>
                       Precio:{' '}
                       <span className="text-accent" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
-                        {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(event.precio)}
+                        {new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(
+                          event.precio,
+                        )}
                       </span>
                     </span>
                   </div>

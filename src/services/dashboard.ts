@@ -30,7 +30,9 @@ export interface DashboardEvent {
   lugar: string | null;
   cliente: string | null;
   precio: number;
-  estado: 'pendiente' | 'confirmado' | 'completado' | 'cancelado';
+  estado_financiero: 'no_pagado' | 'parcialmente_pagado' | 'pagado';
+  estado_trabajo: 'confirmado' | 'realizado' | 'cancelado';
+  estado_completo: 'confirmado' | 'realizado' | 'completado' | 'cancelado';
 }
 
 export interface DashboardData {
@@ -63,7 +65,7 @@ export async function getDashboardData(context: Parameters<typeof getSupabaseSer
       supabase.auth.getUser(),
       supabase
         .from('eventos')
-        .select('id, nombre, fecha, lugar, cliente, presupuesto, estado')
+        .select('id, nombre, fecha, lugar, cliente, presupuesto, estado_financiero, estado_trabajo, estado_completo')
         .gte('fecha', today)
         .order('fecha', { ascending: true })
         .limit(3),
@@ -142,7 +144,9 @@ export async function getDashboardData(context: Parameters<typeof getSupabaseSer
         lugar: event.lugar,
         cliente: event.cliente,
         precio: Number(event.presupuesto ?? 0),
-        estado: event.estado,
+        estado_financiero: event.estado_financiero,
+        estado_trabajo: event.estado_trabajo,
+        estado_completo: event.estado_completo,
       }));
 
     const recentMovements: DashboardMovement[] = [...(ingresosRecent as IngresoRow[]).map((row) => ({

@@ -31,7 +31,9 @@ export interface Database {
           presupuesto: number;
           con_factura: boolean;
           retencion_irpf: number;
-          estado: 'pendiente' | 'confirmado' | 'completado' | 'cancelado';
+          estado_financiero: 'no_pagado' | 'parcialmente_pagado' | 'pagado';
+          estado_trabajo: 'confirmado' | 'realizado' | 'cancelado';
+          estado_completo: 'confirmado' | 'realizado' | 'completado' | 'cancelado';
           observaciones: string | null;
           created_by: string | null;
           created_at: string | null;
@@ -46,7 +48,8 @@ export interface Database {
           presupuesto?: number;
           con_factura?: boolean;
           retencion_irpf?: number;
-          estado?: 'pendiente' | 'confirmado' | 'completado' | 'cancelado';
+          estado_financiero?: 'no_pagado' | 'parcialmente_pagado' | 'pagado';
+          estado_trabajo?: 'confirmado' | 'realizado' | 'cancelado';
           observaciones?: string | null;
           created_by?: string | null;
           created_at?: string | null;
@@ -61,7 +64,8 @@ export interface Database {
           presupuesto?: number;
           con_factura?: boolean;
           retencion_irpf?: number;
-          estado?: 'pendiente' | 'confirmado' | 'completado' | 'cancelado';
+          estado_financiero?: 'no_pagado' | 'parcialmente_pagado' | 'pagado';
+          estado_trabajo?: 'confirmado' | 'realizado' | 'cancelado';
           observaciones?: string | null;
           created_by?: string | null;
           created_at?: string | null;
@@ -228,19 +232,36 @@ export interface Database {
         };
         Relationships: [];
       };
-    };
-    Views: Record<string, never>;
-    Functions: {
-      reembolsar_gasto: {
-        Args: { p_gasto_id: string; p_fecha?: string };
-        Returns: void;
+      aportaciones: {
+        Row: {
+          id: string;
+          socio_id: string;
+          cantidad: number;
+          fecha: string;
+          concepto: string | null;
+          created_by: string | null;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          socio_id: string;
+          cantidad: number;
+          fecha?: string;
+          concepto?: string | null;
+          created_by?: string | null;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          socio_id?: string;
+          cantidad?: number;
+          fecha?: string;
+          concepto?: string | null;
+          created_by?: string | null;
+          created_at?: string | null;
+        };
+        Relationships: [];
       };
-      crear_reparto_evento: {
-        Args: { p_evento_id: string; p_repartos: Json };
-        Returns: void;
-      };
     };
-    Enums: Record<string, never>;
-    CompositeTypes: Record<string, never>;
   };
 }

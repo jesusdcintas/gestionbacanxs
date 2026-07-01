@@ -2,6 +2,11 @@
 import AppLayout from '../../layouts/AppLayout.astro';
 import EventoForm from '../../components/eventos/EventoForm.tsx';
 import { getEvento, updateEvento } from '../../services/eventos';
+import { guardarReparto, getRepartosByEvento } from '../../services/repartos';
+import { getTotalGastosEvento } from '../../services/gastos';
+import { getProfiles } from '../../services/profiles';
+import { calcularNetoRepartibleEvento } from '../../utils/finanzas';
+import type { Database } from '../../types/database';
 
 const { id } = Astro.params;
 
@@ -10,40 +15,91 @@ if (!id) {
 }
 
 let evento;
+let totalGastosEvento = 0;
+let socios: Awaited<ReturnType<typeof getProfiles>> = [];
+let repartos = [];
+
 try {
-  evento = await getEvento(Astro, id);
+  [evento, totalGastosEvento, socios, repartos] = await Promise.all([
+    getEvento(Astro, id),
+    getTotalGastosEvento(Astro, id),
+    getProfiles(Astro),
+    getRepartosByEvento(Astro, id),
+  ]);
 } catch (error) {
   console.error('Error loading evento:', error);
   return Astro.redirect('/eventos');
 }
 
-// Handle form submission
 if (Astro.request.method === 'POST') {
   try {
     const formData = await Astro.request.formData();
-    
-    const eventoData = {
+
+    const eventoData: Database['public']['Tables']['eventos']['Update'] = {
       nombre: formData.get('nombre')?.toString() || '',
       fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
-      lugar: formData.has('lugar') && formData.get('lugar') ? formData.get('lugar')!.toString() : null,
-      cliente: formData.has('cliente') && formData.get('cliente') ? formData.get('cliente')!.toString() : null,
+      lugar:
+        formData.has('lugar') && formData.get('lugar')
+          ? formData.get('lugar')!.toString()
+          : null,
+      cliente:
+        formData.has('cliente') && formData.get('cliente')
+          ? formData.get('cliente')!.toString()
+          : null,
       presupuesto: parseFloat(formData.get('presupuesto')?.toString() || '0'),
       con_factura: formData.get('con_factura') === 'true',
       retencion_irpf: parseFloat(formData.get('retencion_irpf')?.toString() || '20.00'),
-      estado: (formData.get('estado')?.toString() || 'pendiente') as 'pendiente' | 'confirmado' | 'completado' | 'cancelado',
-      observaciones: formData.has('observaciones') && formData.get('observaciones') ? formData.get('observaciones')!.toString() : null,
+      estado_financiero: (formData.get('estado_financiero')?.toString() || 'no_pagado') as Database['public']['Tables']['eventos']['Row']['estado_financiero'],
+      estado_trabajo: (formData.get('estado_trabajo')?.toString() || 'confirmado') as Database['public']['Tables']['eventos']['Row']['estado_trabajo'],
+      observaciones:
+        formData.has('observaciones') && formData.get('observaciones')
+          ? formData.get('observaciones')!.toString()
+          : null,
     };
 
-    console.log('Datos del evento a actualizar:', JSON.stringify(eventoData, null, 2));
-    
     await updateEvento(Astro, id, eventoData);
+
+    const netoRepartible = calcularNetoRepartibleEvento(
+      eventoData.presupuesto ?? 0,
+      eventoData.con_factura ?? false,
+      eventoData.retencion_irpf ?? 20,
+      totalGastosEvento,
+    );
+
+    const repartoEntries = Array.from(formData.entries()).filter(([key]) => key.startsWith('reparto_'));
+    const sociosValidos = new Set(socios.map((s) => s.id));
+
+    const repartoInput = repartoEntries
+      .map(([key, value]) => {
+        const cantidad = parseFloat(value.toString() || '0') || 0;
+        if (key === 'reparto_fondo') {
+          return { socio_id: null as string | null, cantidad };
+        }
+        const socioId = key.replace('reparto_', '');
+        if (!sociosValidos.has(socioId)) {
+          return null;
+        }
+        return { socio_id: socioId, cantidad };
+      })
+      .filter((item): item is { socio_id: string | null; cantidad: number } => item !== null)
+      .filter((item) => item.cantidad > 0);
+
+    const totalRepartido = repartoInput.reduce((sum, item) => sum + item.cantidad, 0);
+    if (totalRepartido > netoRepartible + 0.01) {
+      throw new Error(
+        `El reparto (${totalRepartido.toFixed(2)}€) supera el neto repartible (${netoRepartible.toFixed(2)}€).`,
+      );
+    }
+
+    await guardarReparto(Astro, id, repartoInput);
+
     return Astro.redirect('/eventos');
   } catch (error) {
     console.error('Error updating evento:', error);
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
     return new Response(
       `<html><body><h1>Error al actualizar evento</h1><pre>${errorMessage}</pre><a href="/eventos/${id}">Volver</a></body></html>`,
-      { status: 500, headers: { 'Content-Type': 'text/html' } }
+      { status: 500, headers: { 'Content-Type': 'text/html' } },
     );
   }
 }
@@ -53,9 +109,16 @@ if (Astro.request.method === 'POST') {
   <div class="max-w-3xl mx-auto space-y-6">
     <div>
       <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Editar evento</h1>
-      <p class="text-text-secondary mt-1">Modifica los detalles del evento</p>
+      <p class="text-text-secondary mt-1">Modifica datos, reparto y estado del evento en un solo guardado.</p>
     </div>
 
-    <EventoForm evento={evento} client:load />
+    <EventoForm
+      evento={evento}
+      eventoId={id}
+      totalGastosEvento={totalGastosEvento}
+      socios={socios}
+      repartosIniciales={repartos.map((r) => ({ socio_id: r.socio_id, cantidad: Number(r.cantidad) }))}
+      client:load
+    />
   </div>
 </AppLayout>

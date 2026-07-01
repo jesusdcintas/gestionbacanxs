@@ -45,7 +45,14 @@ create table if not exists public.eventos (
   presupuesto numeric(10,2) not null default 0,
   con_factura boolean default false,
   retencion_irpf numeric(5,2) default 20.00,
-  estado text default 'pendiente' check (estado in ('pendiente','confirmado','completado','cancelado')),
+  estado_financiero text default 'no_pagado' check (estado_financiero in ('no_pagado','parcialmente_pagado','pagado')),
+  estado_trabajo text default 'confirmado' check (estado_trabajo in ('confirmado','realizado','cancelado')),
+  estado_completo text generated always as (
+    case
+      when estado_trabajo = 'realizado' and estado_financiero = 'pagado' then 'completado'
+      else estado_trabajo
+    end
+  ) stored,
   observaciones text,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz default now(),
@@ -116,7 +123,8 @@ create table if not exists public.fondo_movimientos (
 
 -- Eventos
 create index if not exists idx_eventos_fecha on public.eventos (fecha desc);
-create index if not exists idx_eventos_estado on public.eventos (estado);
+create index if not exists idx_eventos_estado_financiero on public.eventos (estado_financiero);
+create index if not exists idx_eventos_estado_trabajo on public.eventos (estado_trabajo);
 create index if not exists idx_eventos_created_by on public.eventos (created_by);
 
 -- Pagos evento

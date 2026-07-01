@@ -10,6 +10,7 @@ import { getGastosByEvento, getTotalGastosEvento } from '../../../services/gasto
 import { getRepartosByEvento } from '../../../services/repartos';
 import { getProfiles } from '../../../services/profiles';
 import { calcularIngresoNeto, calcularNetoRepartible } from '../../../utils/finanzas';
+import { getEstadoStamp, getEstadoVisible, getEstadoVisibleLabel } from '../../../utils/eventoEstado';
 
 const { id } = Astro.params;
 
@@ -31,47 +32,30 @@ try {
   return Astro.redirect('/eventos');
 }
 
-// Cálculos financieros
 const presupuesto = Number(evento.presupuesto);
 const ingresoNeto = calcularIngresoNeto(presupuesto, evento.con_factura, Number(evento.retencion_irpf));
 const totalPagado = await getTotalPagadoEvento(Astro, id);
 const totalGastos = await getTotalGastosEvento(Astro, id);
 const netoRepartible = calcularNetoRepartible(ingresoNeto, totalGastos);
 
-// Formatear repartos para el componente
-const repartosFormateados = repartos.map(r => ({
+const repartosFormateados = repartos.map((r) => ({
   socio_id: r.socio_id,
   nombre: r.socio_id ? (r.profiles?.nombre || 'Desconocido') : 'Fondo de empresa',
   cantidad: Number(r.cantidad),
 }));
 
-// Estados -> StampLabel variant + rotate
-const estadoStamps: Record<string, { variant: 'outline' | 'accent' | 'danger'; rotate: 'left' | 'right' }> = {
-  pendiente: { variant: 'outline', rotate: 'left' },
-  confirmado: { variant: 'accent', rotate: 'right' },
-  completado: { variant: 'outline', rotate: 'right' },
-  cancelado: { variant: 'danger', rotate: 'left' },
-};
-
-const estadoLabels: Record<string, string> = {
-  pendiente: 'Pendiente',
-  confirmado: 'Confirmado',
-  completado: 'Completado',
-  cancelado: 'Cancelado',
-};
-
-const estadoStamp = estadoStamps[evento.estado] ?? estadoStamps.pendiente;
+const estadoVisible = getEstadoVisible(evento.estado_trabajo, evento.estado_financiero);
+const estadoStamp = getEstadoStamp(estadoVisible);
 ---
 
 <AppLayout title={evento.nombre}>
   <div class="max-w-6xl mx-auto space-y-6">
-    <!-- Header -->
     <div class="flex items-start justify-between">
       <div>
         <div class="flex items-center gap-3 mb-2">
           <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">{evento.nombre}</h1>
           <StampLabel variant={estadoStamp.variant} rotate={estadoStamp.rotate}>
-            {estadoLabels[evento.estado]}
+            {getEstadoVisibleLabel(estadoVisible)}
           </StampLabel>
         </div>
         <p class="text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">
@@ -88,7 +72,6 @@ const estadoStamp = estadoStamps[evento.estado] ?? estadoStamps.pendiente;
       </div>
     </div>
 
-    <!-- Resumen financiero -->
     <Card>
       <StampLabel rotate="left">Resumen financiero</StampLabel>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
@@ -124,7 +107,6 @@ const estadoStamp = estadoStamps[evento.estado] ?? estadoStamps.pendiente;
       </div>
     </Card>
 
-    <!-- Información del evento -->
     {(evento.cliente || evento.observaciones) && (
       <Card>
         <StampLabel rotate="right">Información adicional</StampLabel>
@@ -145,14 +127,8 @@ const estadoStamp = estadoStamps[evento.estado] ?? estadoStamps.pendiente;
       </Card>
     )}
 
-    <!-- Pagos recibidos -->
-    <PagosEventoSection
-      eventoId={id}
-      pagos={pagos}
-      client:load
-    />
+    <PagosEventoSection eventoId={id} pagos={pagos} client:load />
 
-    <!-- Gastos del evento -->
     <Card>
       <div class="flex items-center justify-between mb-4">
         <div>
@@ -197,7 +173,6 @@ const estadoStamp = estadoStamps[evento.estado] ?? estadoStamps.pendiente;
       )}
     </Card>
 
-    <!-- Reparto del neto -->
     <RepartoSection
       eventoId={id}
       socios={socios}

@@ -4,25 +4,9 @@ import EventosTable from '../../components/eventos/EventosTable.tsx';
 import { Button } from '../../components/ui/Button.tsx';
 import { Card } from '../../components/ui/Card.tsx';
 import { Plus } from 'lucide-react';
-import { getEventos, deleteEvento } from '../../services/eventos';
+import { getEventos } from '../../services/eventos';
 
 const eventos = await getEventos(Astro);
-
-// Handle delete action
-if (Astro.request.method === 'POST') {
-  const formData = await Astro.request.formData();
-  const action = formData.get('action');
-  const id = formData.get('id');
-
-  if (action === 'delete' && id) {
-    try {
-      await deleteEvento(Astro, id.toString());
-      return Astro.redirect('/eventos');
-    } catch (error) {
-      console.error('Error deleting evento:', error);
-    }
-  }
-}
 ---
 
 <AppLayout title="Eventos">
@@ -41,23 +25,7 @@ if (Astro.request.method === 'POST') {
     </div>
 
     <Card>
-      <EventosTable
-        eventos={eventos}
-        onEdit={(id) => {
-          window.location.href = `/eventos/${id}`;
-        }}
-        onDelete={(id) => {
-          const form = document.createElement('form');
-          form.method = 'POST';
-          form.innerHTML = `
-            <input type="hidden" name="action" value="delete" />
-            <input type="hidden" name="id" value="${id}" />
-          `;
-          document.body.appendChild(form);
-          form.submit();
-        }}
-        client:load
-      />
+      <EventosTable eventos={eventos} editBasePath="/eventos" client:load />
     </Card>
   </div>
 </AppLayout>

@@ -4,25 +4,9 @@ import IngresosTable from '../../components/ingresos/IngresosTable.tsx';
 import { Button } from '../../components/ui/Button.tsx';
 import { Card } from '../../components/ui/Card.tsx';
 import { Plus } from 'lucide-react';
-import { getIngresos, deleteIngreso } from '../../services/ingresos';
+import { getIngresos } from '../../services/ingresos';
 
 const ingresos = await getIngresos(Astro);
-
-// Handle delete action
-if (Astro.request.method === 'POST') {
-  const formData = await Astro.request.formData();
-  const action = formData.get('action');
-  const id = formData.get('id');
-
-  if (action === 'delete' && id) {
-    try {
-      await deleteIngreso(Astro, id.toString());
-      return Astro.redirect('/ingresos');
-    } catch (error) {
-      console.error('Error deleting ingreso:', error);
-    }
-  }
-}
 ---
 
 <AppLayout title="Ingresos">
@@ -41,23 +25,7 @@ if (Astro.request.method === 'POST') {
     </div>
 
     <Card>
-      <IngresosTable
-        ingresos={ingresos}
-        onEdit={(id) => {
-          window.location.href = `/ingresos/${id}`;
-        }}
-        onDelete={(id) => {
-          const form = document.createElement('form');
-          form.method = 'POST';
-          form.innerHTML = `
-            <input type="hidden" name="action" value="delete" />
-            <input type="hidden" name="id" value="${id}" />
-          `;
-          document.body.appendChild(form);
-          form.submit();
-        }}
-        client:load
-      />
+      <IngresosTable ingresos={ingresos} editBasePath="/ingresos" client:load />
     </Card>
   </div>
 </AppLayout>
