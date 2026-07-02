@@ -9,6 +9,12 @@ export interface RepartoInput {
   cantidad: number;
 }
 
+export interface RegistrarRepartoInput {
+  fecha: string;
+  concepto: string | null;
+  repartos: RepartoInput[];
+}
+
 /**
  * Obtiene los repartos de un evento específico
  */
@@ -19,6 +25,7 @@ export async function getRepartosByEvento(context: APIContext, eventoId: string)
     .from('repartos_evento')
     .select('*, profiles(nombre)')
     .eq('evento_id', eventoId)
+    .order('fecha', { ascending: false })
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -30,67 +37,60 @@ export async function getRepartosByEvento(context: APIContext, eventoId: string)
 }
 
 /**
- * Guarda el reparto de un evento (reemplaza los anteriores)
- * Usa la función RPC guardar_reparto_evento para hacerlo atómicamente.
- * Además, sincroniza el movimiento en fondo_movimientos correspondiente al reparto al fondo.
+ * Registra una nueva tanda de reparto para un evento (acumulativo/histórico).
+ * Usa la función RPC registrar_reparto_evento para operación atómica.
  */
-export async function guardarReparto(
+export async function registrarRepartoEvento(
   context: APIContext,
   eventoId: string,
-  repartos: RepartoInput[]
+  input: RegistrarRepartoInput,
 ) {
   const supabase = getSupabaseServerClient(context);
 
-  console.log('Guardando reparto para evento:', eventoId);
+  const repartos = input.repartos.filter((r) => r.cantidad > 0);
+  if (repartos.length === 0) {
+    throw new Error('Debes indicar al menos una cantidad mayor que 0 en esta tanda');
+  }
+
+  console.log('Registrando reparto para evento:', eventoId);
+  console.log('Fecha:', input.fecha, 'Concepto:', input.concepto);
   console.log('Repartos:', JSON.stringify(repartos, null, 2));
 
-  // Llamar a la función RPC que hace el delete + insert atómicamente
-  const { error } = await supabase.rpc('guardar_reparto_evento', {
+  const { error } = await supabase.rpc('registrar_reparto_evento', {
     p_evento_id: eventoId,
+    p_fecha: input.fecha,
+    p_concepto: input.concepto,
     p_repartos: repartos as any, // jsonb
   });
 
   if (error) {
-    console.error('Error guardando reparto:', error);
-    throw new Error(`No se pudo guardar el reparto: ${error.message}`);
+    console.error('Error registrando reparto:', error);
+    throw new Error(`No se pudo registrar la tanda de reparto: ${error.message}`);
   }
 
-  // Sincronizar fondo_movimientos: eliminar antiguos asociados al evento sin gasto_id
-  // (los de tipo "Entrada desde reparto") y crear uno nuevo si hay aporte al fondo
-  await supabase
-    .from('fondo_movimientos')
-    .delete()
-    .eq('evento_id', eventoId)
-    .is('gasto_id', null);
+  console.log('Tanda de reparto registrada exitosamente');
+}
 
-  const aporteFondo = repartos.find((r) => r.socio_id === null);
-  if (aporteFondo && aporteFondo.cantidad > 0) {
-    const { data: evento } = await supabase
-      .from('eventos')
-      .select('nombre, fecha')
-      .eq('id', eventoId)
-      .single();
+/**
+ * Obtiene el total ya repartido en un evento (histórico acumulado)
+ */
+export async function getTotalRepartidoEvento(
+  context: APIContext,
+  eventoId: string,
+): Promise<number> {
+  const supabase = getSupabaseServerClient(context);
 
-    const fecha = evento?.fecha ?? new Date().toISOString().split('T')[0];
-    const concepto = evento?.nombre
-      ? `Reparto del evento "${evento.nombre}" al fondo`
-      : 'Entrada desde reparto de evento';
+  const { data, error } = await supabase
+    .from('repartos_evento')
+    .select('cantidad')
+    .eq('evento_id', eventoId);
 
-    const { error: fondoError } = await supabase.from('fondo_movimientos').insert({
-      evento_id: eventoId,
-      gasto_id: null,
-      fecha,
-      concepto,
-      cantidad: aporteFondo.cantidad,
-    });
-
-    if (fondoError) {
-      console.error('Error sincronizando movimiento del fondo:', fondoError);
-      // No abortamos: el reparto ya quedó guardado
-    }
+  if (error) {
+    console.error('Error fetching total repartido evento:', error);
+    throw new Error('No se pudo calcular el total repartido del evento');
   }
 
-  console.log('Reparto guardado exitosamente');
+  return data.reduce((sum, item) => sum + Number(item.cantidad), 0);
 }
 
 /**

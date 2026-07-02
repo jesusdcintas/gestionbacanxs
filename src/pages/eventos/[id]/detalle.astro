@@ -9,7 +9,14 @@ import { getPagosByEvento, getTotalPagadoEvento } from '../../../services/pagos'
 import { getGastosByEvento, getTotalGastosEvento } from '../../../services/gastos';
 import { getRepartosByEvento } from '../../../services/repartos';
 import { getProfiles } from '../../../services/profiles';
-import { calcularIngresoNeto, calcularNetoRepartible } from '../../../utils/finanzas';
+import {
+  IVA_POR_DEFECTO,
+  calcularBaseImponible,
+  calcularIVA,
+  calcularIngresoNeto,
+  calcularNetoRepartible,
+  calcularRetencionIRPF,
+} from '../../../utils/finanzas';
 import { getEstadoStamp, getEstadoVisible, getEstadoVisibleLabel } from '../../../utils/eventoEstado';
 
 const { id } = Astro.params;
@@ -34,14 +41,29 @@ try {
 
 const presupuesto = Number(evento.presupuesto);
 const ingresoNeto = calcularIngresoNeto(presupuesto, evento.con_factura, Number(evento.retencion_irpf));
+const ivaImporte = calcularIVA(presupuesto, evento.con_factura, IVA_POR_DEFECTO);
+const baseImponible = calcularBaseImponible(
+  presupuesto,
+  evento.con_factura,
+  IVA_POR_DEFECTO,
+);
+const retencionImporte = calcularRetencionIRPF(
+  presupuesto,
+  evento.con_factura,
+  Number(evento.retencion_irpf),
+);
 const totalPagado = await getTotalPagadoEvento(Astro, id);
 const totalGastos = await getTotalGastosEvento(Astro, id);
 const netoRepartible = calcularNetoRepartible(ingresoNeto, totalGastos);
 
 const repartosFormateados = repartos.map((r) => ({
+  id: r.id,
   socio_id: r.socio_id,
   nombre: r.socio_id ? (r.profiles?.nombre || 'Desconocido') : 'Fondo de empresa',
   cantidad: Number(r.cantidad),
+  fecha: r.fecha,
+  concepto: r.concepto,
+  created_at: r.created_at,
 }));
 
 const estadoVisible = getEstadoVisible(evento.estado_trabajo, evento.estado_financiero);
@@ -73,6 +95,92 @@ const estadoStamp = getEstadoStamp(estadoVisible);
     </div>
 
     <Card>
+      <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <StampLabel rotate="none">Estados del evento</StampLabel>
+          <p class="mt-2 text-sm text-text-secondary">Puedes actualizar trabajo y cobro desde esta vista.</p>
+        </div>
+        <form method="POST" action={`/api/eventos/${id}/estado`} class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:flex md:items-end">
+          <input type="hidden" name="redirect_to" value={`/eventos/${id}/detalle`} />
+
+          <label class="flex flex-col gap-1">
+            <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Trabajo</span>
+            <select
+              name="estado_trabajo"
+              class="min-w-[180px] border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+            >
+              <option value="confirmado" selected={evento.estado_trabajo === 'confirmado'}>Confirmado</option>
+              <option value="realizado" selected={evento.estado_trabajo === 'realizado'}>Realizado</option>
+              <option value="cancelado" selected={evento.estado_trabajo === 'cancelado'}>Cancelado</option>
+            </select>
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Financiero</span>
+            <select
+              name="estado_financiero"
+              class="min-w-[180px] border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+            >
+              <option value="no_pagado" selected={evento.estado_financiero === 'no_pagado'}>No pagado</option>
+              <option value="parcialmente_pagado" selected={evento.estado_financiero === 'parcialmente_pagado'}>Parcialmente pagado</option>
+              <option value="pagado" selected={evento.estado_financiero === 'pagado'}>Pagado</option>
+            </select>
+          </label>
+
+          <button
+            type="submit"
+            class="h-[42px] border border-accent bg-accent px-4 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-accent-hover"
+          >
+            Guardar estados
+          </button>
+        </form>
+      </div>
+    </Card>
+
+    <Card>
+      <div class="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <StampLabel rotate="none">Parámetros fiscales</StampLabel>
+          <p class="mt-2 text-sm text-text-secondary">Configura si es facturable y el porcentaje de retención IRPF.</p>
+        </div>
+        <form method="POST" action={`/api/eventos/${id}/facturacion`} class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:flex md:items-end">
+          <input type="hidden" name="redirect_to" value={`/eventos/${id}/detalle`} />
+
+          <label class="flex h-[42px] items-center gap-2 border border-border bg-[#0a0a0a] px-3">
+            <input
+              type="checkbox"
+              name="con_factura"
+              value="true"
+              checked={evento.con_factura}
+              class="h-4 w-4 border-border-strong bg-[#0a0a0a] text-accent accent-accent focus:ring-accent"
+            />
+            <span class="text-sm text-text-primary">Facturable</span>
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Retención IRPF (%)</span>
+            <input
+              type="number"
+              name="retencion_irpf"
+              min="0"
+              max="100"
+              step="0.01"
+              value={Number(evento.retencion_irpf).toFixed(2)}
+              class="min-w-[180px] border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+            />
+          </label>
+
+          <button
+            type="submit"
+            class="h-[42px] border border-accent bg-accent px-4 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-accent-hover"
+          >
+            Guardar IRPF
+          </button>
+        </form>
+      </div>
+    </Card>
+
+    <Card>
       <StampLabel rotate="left">Resumen financiero</StampLabel>
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
         <div class="p-4 bg-[#0a0a0a] border border-border">
@@ -83,9 +191,17 @@ const estadoStamp = getEstadoStamp(estadoVisible);
           <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Ingreso neto</p>
           <p class="text-2xl font-bold text-accent" style="font-family: 'JetBrains Mono', monospace;">{ingresoNeto.toFixed(2)} €</p>
           {evento.con_factura && (
-            <p class="text-xs text-text-secondary mt-1" style="font-family: 'JetBrains Mono', monospace;">
-              Retención IRPF: −{(presupuesto - ingresoNeto).toFixed(2)} €
-            </p>
+            <div class="mt-1 space-y-1">
+              <p class="text-xs text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">
+                IVA ({IVA_POR_DEFECTO}%): −{ivaImporte.toFixed(2)} €
+              </p>
+              <p class="text-xs text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">
+                Base imponible: {baseImponible.toFixed(2)} €
+              </p>
+              <p class="text-xs text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">
+                Retención IRPF ({Number(evento.retencion_irpf).toFixed(2)}% sobre base): −{retencionImporte.toFixed(2)} €
+              </p>
+            </div>
           )}
         </div>
         <div class="p-4 bg-[#0a0a0a] border border-border">

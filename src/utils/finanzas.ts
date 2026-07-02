@@ -3,13 +3,53 @@
  * Todas las funciones son puras (sin efectos secundarios)
  */
 
+export const IVA_POR_DEFECTO = 21;
+
 /**
- * Calcula el ingreso neto de un evento después de aplicar retención IRPF
+ * Calcula la base imponible a partir del importe bruto (IVA incluido).
  *
- * @param presupuesto - Presupuesto total del evento
+ * @param presupuesto - Importe bruto del evento
  * @param conFactura - Si el evento se factura
- * @param retencionIRPF - Porcentaje de retención IRPF (ej: 20.00)
- * @returns Ingreso neto = presupuesto - retención
+ * @param ivaPct - Porcentaje de IVA (por defecto 21%)
+ * @returns Base imponible sin IVA
+ */
+export function calcularBaseImponible(
+  presupuesto: number,
+  conFactura: boolean,
+  ivaPct: number = IVA_POR_DEFECTO,
+): number {
+  if (!conFactura) {
+    return presupuesto;
+  }
+
+  return presupuesto / (1 + ivaPct / 100);
+}
+
+/**
+ * Calcula el importe de IVA incluido en el presupuesto bruto.
+ *
+ * @param presupuesto - Importe bruto del evento
+ * @param conFactura - Si el evento se factura
+ * @param ivaPct - Porcentaje de IVA (por defecto 21%)
+ * @returns Importe de IVA
+ */
+export function calcularIVA(
+  presupuesto: number,
+  conFactura: boolean,
+  ivaPct: number = IVA_POR_DEFECTO,
+): number {
+  if (!conFactura) {
+    return 0;
+  }
+
+  const base = calcularBaseImponible(presupuesto, conFactura, ivaPct);
+  return presupuesto - base;
+}
+
+/**
+ * Calcula el ingreso neto de un evento facturable aplicando:
+ * 1) quitar IVA del bruto (base imponible)
+ * 2) aplicar IRPF sobre la base imponible
  */
 export function calcularIngresoNeto(
   presupuesto: number,
@@ -20,8 +60,9 @@ export function calcularIngresoNeto(
     return presupuesto;
   }
 
-  const retencion = (presupuesto * retencionIRPF) / 100;
-  return presupuesto - retencion;
+  const base = calcularBaseImponible(presupuesto, conFactura);
+  const retencion = (base * retencionIRPF) / 100;
+  return base - retencion;
 }
 
 /**
@@ -41,7 +82,8 @@ export function calcularRetencionIRPF(
     return 0;
   }
 
-  return (presupuesto * retencionIRPF) / 100;
+  const base = calcularBaseImponible(presupuesto, conFactura);
+  return (base * retencionIRPF) / 100;
 }
 
 /**
@@ -61,9 +103,6 @@ export function calcularNetoRepartible(
 
 /**
  * Cálculo integral del neto repartible desde inputs brutos del evento.
- *
- * TODO: Confirmar regla exacta de negocio sobre el orden retención/gastos.
- * Actualmente se aplica: presupuesto - retención_irpf - gastos = neto_repartible.
  */
 export function calcularNetoRepartibleEvento(
   presupuesto: number,

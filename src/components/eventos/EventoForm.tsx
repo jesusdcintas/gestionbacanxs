@@ -12,7 +12,14 @@ import {
   type EstadoFinanciero,
   type EstadoTrabajo,
 } from '../../utils/eventoEstado';
-import { calcularNetoRepartibleEvento, calcularRetencionIRPF } from '../../utils/finanzas';
+import {
+  IVA_POR_DEFECTO,
+  calcularBaseImponible,
+  calcularIngresoNeto,
+  calcularIVA,
+  calcularNetoRepartibleEvento,
+  calcularRetencionIRPF,
+} from '../../utils/finanzas';
 
 type Evento = Database['public']['Tables']['eventos']['Row'];
 
@@ -32,6 +39,7 @@ interface Props {
   totalGastosEvento?: number;
   socios?: Socio[];
   repartosIniciales?: RepartoInicial[];
+  trabajadoresIniciales?: string[];
 }
 
 const ESTADOS_FINANCIEROS: Array<{ value: EstadoFinanciero; label: string }> = [
@@ -52,6 +60,7 @@ export default function EventoForm({
   totalGastosEvento = 0,
   socios = [],
   repartosIniciales = [],
+  trabajadoresIniciales = [],
 }: Props) {
   const [formData, setFormData] = useState({
     nombre: evento?.nombre || '',
@@ -67,6 +76,13 @@ export default function EventoForm({
   });
 
   const [repartos, setRepartos] = useState<Record<string, string>>({});
+  const [trabajadores, setTrabajadores] = useState<Set<string>>(
+    () => new Set(trabajadoresIniciales),
+  );
+
+  useEffect(() => {
+    setTrabajadores(new Set(trabajadoresIniciales));
+  }, [trabajadoresIniciales]);
 
   useEffect(() => {
     const inicial: Record<string, string> = {};
@@ -88,6 +104,8 @@ export default function EventoForm({
 
   const presupuestoBruto = parseFloat(formData.presupuesto) || 0;
   const retencionPct = parseFloat(formData.retencion_irpf) || 0;
+  const baseImponible = calcularBaseImponible(presupuestoBruto, formData.con_factura, IVA_POR_DEFECTO);
+  const ivaImporte = calcularIVA(presupuestoBruto, formData.con_factura, IVA_POR_DEFECTO);
   const retencionImporte = calcularRetencionIRPF(
     presupuestoBruto,
     formData.con_factura,
@@ -100,6 +118,7 @@ export default function EventoForm({
     retencionPct,
     totalGastosEvento,
   );
+  const ingresoNeto = calcularIngresoNeto(presupuestoBruto, formData.con_factura, retencionPct);
 
   const totalRepartido = Object.values(repartos).reduce((sum, value) => {
     return sum + (parseFloat(value) || 0);
@@ -253,7 +272,7 @@ export default function EventoForm({
                   onChange={(e) => setFormData({ ...formData, con_factura: e.target.checked })}
                   className="h-4 w-4 border-border-strong bg-[#0a0a0a] text-accent accent-accent focus:ring-accent focus:ring-offset-[#0a0a0a]"
                 />
-                <span className="text-sm text-text-primary">Con factura (aplicar retención IRPF)</span>
+                <span className="text-sm text-text-primary">Con factura (quitar IVA y aplicar retención IRPF)</span>
               </label>
             </div>
 
@@ -283,10 +302,32 @@ export default function EventoForm({
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-[11px] uppercase tracking-[0.08em] text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
-                (−) Retención IRPF
+                (−) IVA ({IVA_POR_DEFECTO}%)
+              </span>
+              <span className={formData.con_factura ? 'text-danger' : 'text-text-secondary'}>
+                −{ivaImporte.toFixed(2)} €
+              </span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-[11px] uppercase tracking-[0.08em] text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
+                (=) Base imponible
+              </span>
+              <span className="text-text-primary">{baseImponible.toFixed(2)} €</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-[11px] uppercase tracking-[0.08em] text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
+                (−) Retención IRPF ({retencionPct.toFixed(2)}%)
               </span>
               <span className={formData.con_factura ? 'text-danger' : 'text-text-secondary'}>
                 −{retencionImporte.toFixed(2)} €
+              </span>
+            </div>
+            <div className="flex justify-between border-t border-border pt-2 font-semibold">
+              <span className="text-[11px] uppercase tracking-[0.08em] text-text-primary" style={{ fontFamily: 'Inter, sans-serif' }}>
+                Ingreso neto
+              </span>
+              <span className={ingresoNeto >= 0 ? 'text-accent' : 'text-danger'}>
+                {ingresoNeto.toFixed(2)} €
               </span>
             </div>
             <div className="flex justify-between text-sm">
@@ -309,7 +350,46 @@ export default function EventoForm({
 
         {eventoId && (
           <div className="space-y-4">
-            <StampLabel rotate="left">Reparto de ganancias</StampLabel>
+            <StampLabel rotate="left">¿Quién trabajó este evento?</StampLabel>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {socios.map((socio) => {
+                const checked = trabajadores.has(socio.id);
+                return (
+                  <label
+                    key={socio.id}
+                    className="flex cursor-pointer items-center gap-3 border border-border bg-[#0a0a0a] p-3"
+                  >
+                    <input
+                      type="checkbox"
+                      name={`trabajador_${socio.id}`}
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = new Set(trabajadores);
+                        if (e.target.checked) {
+                          next.add(socio.id);
+                        } else {
+                          next.delete(socio.id);
+                        }
+                        setTrabajadores(next);
+                      }}
+                      className="h-4 w-4 border-border-strong bg-[#0a0a0a] text-accent accent-accent focus:ring-accent"
+                    />
+                    <span className="text-sm font-medium text-text-primary">{socio.nombre}</span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <p className="text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
+              Selecciona quién estuvo físicamente en el evento. Este registro se usa para el histórico de carga de trabajo.
+            </p>
+          </div>
+        )}
+
+        {eventoId && (
+          <div className="space-y-4">
+            <StampLabel rotate="left">Reparto orientativo (manual)</StampLabel>
 
             <div className="space-y-3">
               {socios.map((socio) => (
@@ -358,7 +438,7 @@ export default function EventoForm({
               </p>
               {repartoSePasa && (
                 <p className="mt-2 text-xs text-danger" style={{ fontFamily: 'Inter, sans-serif' }}>
-                  El reparto supera el neto repartible. Ajusta importes para poder guardar.
+                  El reparto supera el neto repartible. Ajusta importes.
                 </p>
               )}
               {!repartoSePasa && sinRepartir > 0.01 && (
@@ -366,6 +446,9 @@ export default function EventoForm({
                   Reparto parcial permitido: quedará parte del neto sin asignar.
                 </p>
               )}
+              <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
+                Este bloque ya no guarda repartos históricos. Usa la sección de detalle del evento para registrar tandas acumulativas con fecha y concepto.
+              </p>
             </div>
           </div>
         )}

@@ -184,6 +184,8 @@ export interface Database {
           evento_id: string;
           socio_id: string | null;
           cantidad: number;
+          fecha: string;
+          concepto: string | null;
           created_at: string | null;
         };
         Insert: {
@@ -191,6 +193,8 @@ export interface Database {
           evento_id: string;
           socio_id?: string | null;
           cantidad: number;
+          fecha?: string;
+          concepto?: string | null;
           created_at?: string | null;
         };
         Update: {
@@ -198,6 +202,26 @@ export interface Database {
           evento_id?: string;
           socio_id?: string | null;
           cantidad?: number;
+          fecha?: string;
+          concepto?: string | null;
+          created_at?: string | null;
+        };
+        Relationships: [];
+      };
+      evento_trabajadores: {
+        Row: {
+          evento_id: string;
+          socio_id: string;
+          created_at: string | null;
+        };
+        Insert: {
+          evento_id: string;
+          socio_id: string;
+          created_at?: string | null;
+        };
+        Update: {
+          evento_id?: string;
+          socio_id?: string;
           created_at?: string | null;
         };
         Relationships: [];

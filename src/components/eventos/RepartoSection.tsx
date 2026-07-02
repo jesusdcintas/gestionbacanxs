@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
@@ -9,244 +9,269 @@ interface Socio {
   nombre: string;
 }
 
-interface Reparto {
+interface RepartoHistorico {
+  id: string;
   socio_id: string | null;
   nombre: string;
   cantidad: number;
+  fecha: string;
+  concepto: string | null;
+  created_at?: string | null;
 }
 
 interface Props {
   eventoId: string;
   socios: Socio[];
-  repartosIniciales: Reparto[];
+  repartosIniciales: RepartoHistorico[];
   netoRepartible: number;
 }
 
-export default function RepartoSection({ 
-  eventoId, 
-  socios, 
+export default function RepartoSection({
+  eventoId,
+  socios,
   repartosIniciales,
-  netoRepartible 
+  netoRepartible,
 }: Props) {
-  const [repartos, setRepartos] = useState<Record<string, string>>({});
+  const [asignaciones, setAsignaciones] = useState<Record<string, string>>(() => {
+    const inicial: Record<string, string> = {};
+    socios.forEach((socio) => {
+      inicial[socio.id] = '0';
+    });
+    inicial.fondo = '0';
+    return inicial;
+  });
+  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [concepto, setConcepto] = useState('');
   const [guardando, setGuardando] = useState(false);
 
-  // Inicializar repartos
-  useEffect(() => {
-    const inicial: Record<string, string> = {};
-    
-    // Socios
-    socios.forEach(socio => {
-      const reparto = repartosIniciales.find(r => r.socio_id === socio.id);
-      inicial[socio.id] = reparto ? reparto.cantidad.toString() : '0';
-    });
-    
-    // Fondo empresa
-    const repartoFondo = repartosIniciales.find(r => r.socio_id === null);
-    inicial['fondo'] = repartoFondo ? repartoFondo.cantidad.toString() : '0';
-    
-    setRepartos(inicial);
-  }, [socios, repartosIniciales]);
+  const yaRepartido = useMemo(
+    () => repartosIniciales.reduce((sum, r) => sum + Number(r.cantidad), 0),
+    [repartosIniciales],
+  );
+  const pendiente = netoRepartible - yaRepartido;
 
-  // Calcular total repartido
-  const totalRepartido = Object.values(repartos).reduce((sum, val) => {
-    return sum + (parseFloat(val) || 0);
-  }, 0);
+  const totalTanda = useMemo(
+    () => Object.values(asignaciones).reduce((sum, val) => sum + (parseFloat(val) || 0), 0),
+    [asignaciones],
+  );
 
-  const diferencia = netoRepartible - totalRepartido;
-  const esValido = Math.abs(diferencia) < 0.01; // Tolerancia de 1 céntimo
+  const excedePendiente = totalTanda > pendiente + 0.01;
+  const puedeGuardar = totalTanda > 0 && !excedePendiente;
 
-  const handleChange = (key: string, value: string) => {
-    setRepartos({
-      ...repartos,
-      [key]: value,
-    });
+  const setAsignacion = (key: string, value: string) => {
+    setAsignaciones((prev) => ({ ...prev, [key]: value }));
   };
 
-  const distribuirEquitativamente = () => {
-    const numParticipantes = socios.length + 1; // socios + fondo
-    const parteIgual = netoRepartible / numParticipantes;
-    
-    const nuevoReparto: Record<string, string> = {};
-    socios.forEach(socio => {
-      nuevoReparto[socio.id] = parteIgual.toFixed(2);
+  const limpiarTanda = () => {
+    const limpio: Record<string, string> = {};
+    socios.forEach((socio) => {
+      limpio[socio.id] = '0';
     });
-    nuevoReparto['fondo'] = parteIgual.toFixed(2);
-    
-    setRepartos(nuevoReparto);
+    limpio.fondo = '0';
+    setAsignaciones(limpio);
+    setConcepto('');
   };
 
-  const handleGuardar = async () => {
-    if (!esValido) {
-      alert('El reparto debe sumar exactamente el neto repartible');
+  const repartirPendienteEquitativamente = () => {
+    if (socios.length === 0) return;
+
+    const monto = Number(pendiente.toFixed(2));
+    if (monto <= 0) {
+      window.alert('No hay saldo pendiente para repartir.');
       return;
     }
 
+    const totalCentimos = Math.round(monto * 100);
+    const baseCentimos = Math.floor(totalCentimos / socios.length);
+    const restoCentimos = totalCentimos - baseCentimos * socios.length;
+
+    const next: Record<string, string> = {};
+    socios.forEach((socio, index) => {
+      const centimos = baseCentimos + (index < restoCentimos ? 1 : 0);
+      next[socio.id] = (centimos / 100).toFixed(2);
+    });
+    next.fondo = '0.00';
+
+    setAsignaciones(next);
+    if (!concepto.trim()) {
+      setConcepto('Reparto equitativo');
+    }
+  };
+
+  const handleGuardar = async () => {
+    if (!puedeGuardar) {
+      window.alert('La tanda supera lo pendiente por repartir o está vacía');
+      return;
+    }
+
+    const repartos = [
+      ...socios.map((socio) => ({
+        socio_id: socio.id,
+        cantidad: parseFloat(asignaciones[socio.id] || '0') || 0,
+      })),
+      {
+        socio_id: null,
+        cantidad: parseFloat(asignaciones.fondo || '0') || 0,
+      },
+    ].filter((item) => item.cantidad > 0);
+
     setGuardando(true);
-
     try {
-      // Convertir a formato para la API
-      const repartosData = [
-        // Socios
-        ...socios.map(socio => ({
-          socio_id: socio.id,
-          cantidad: parseFloat(repartos[socio.id] || '0'),
-        })),
-        // Fondo empresa
-        {
-          socio_id: null,
-          cantidad: parseFloat(repartos['fondo'] || '0'),
-        },
-      ].filter(r => r.cantidad > 0); // Solo incluir cantidades > 0
-
       const response = await fetch(`/api/repartos/${eventoId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ repartos: repartosData }),
+        body: JSON.stringify({
+          fecha,
+          concepto: concepto.trim() || null,
+          repartos,
+        }),
       });
 
-      if (!response.ok) throw new Error('Error al guardar reparto');
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || 'No se pudo registrar la tanda de reparto');
+      }
 
-      alert('Reparto guardado correctamente');
-      window.location.reload(); // Recargar para ver cambios
+      limpiarTanda();
+      window.location.reload();
     } catch (error) {
-      console.error('Error:', error);
-      alert('Error al guardar el reparto');
+      const msg = error instanceof Error ? error.message : 'Error al guardar reparto';
+      window.alert(msg);
     } finally {
       setGuardando(false);
     }
   };
 
-  if (netoRepartible <= 0) {
-    return (
-      <Card>
-        <div className="text-center py-8">
-          <p className="text-text-primary">
-            No hay neto repartible para este evento.
-          </p>
-          <p className="text-sm text-text-secondary mt-2">
-            Asegúrate de que el evento tenga pagos recibidos y que superen los gastos.
-          </p>
-        </div>
-      </Card>
-    );
-  }
-
   return (
     <Card>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <StampLabel rotate="right">Reparto del neto</StampLabel>
-            <p className="mt-2 text-sm text-text-secondary">
-              Neto repartible:{' '}
-              <span
-                className="font-semibold text-accent"
-                style={{ fontFamily: '"JetBrains Mono", monospace' }}
-              >
-                {netoRepartible.toFixed(2)} €
-              </span>
-            </p>
+      <div className="space-y-5">
+        <div className="flex flex-col gap-2">
+          <StampLabel rotate="right">Repartos acumulativos</StampLabel>
+          <p className="text-sm text-text-secondary">
+            Neto total:{' '}
+            <span style={{ fontFamily: '"JetBrains Mono", monospace' }} className="text-accent font-semibold">
+              {netoRepartible.toFixed(2)} €
+            </span>
+            {' · '}
+            Ya repartido:{' '}
+            <span style={{ fontFamily: '"JetBrains Mono", monospace' }} className="text-text-primary font-semibold">
+              {yaRepartido.toFixed(2)} €
+            </span>
+            {' · '}
+            Pendiente:{' '}
+            <span
+              style={{ fontFamily: '"JetBrains Mono", monospace' }}
+              className={pendiente >= 0 ? 'text-accent font-semibold' : 'text-danger font-semibold'}
+            >
+              {pendiente.toFixed(2)} €
+            </span>
+          </p>
+        </div>
+
+        <div className="border border-border p-4 bg-[#0a0a0a] space-y-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <Input
+              label="Fecha de la tanda"
+              type="date"
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
+            />
+            <Input
+              label="Concepto"
+              type="text"
+              value={concepto}
+              onChange={(e) => setConcepto(e.target.value)}
+              placeholder="Ej: Señal, pago final..."
+            />
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={distribuirEquitativamente}
+
+          <div className="space-y-3">
+            {socios.map((socio) => (
+              <div key={socio.id} className="flex items-center gap-3 border border-border p-3">
+                <span className="flex-1 text-sm text-text-primary font-medium">{socio.nombre}</span>
+                <div className="w-36">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={asignaciones[socio.id] || '0'}
+                    onChange={(e) => setAsignacion(socio.id, e.target.value)}
+                  />
+                </div>
+                <span className="text-sm text-text-secondary">€</span>
+              </div>
+            ))}
+
+            <div className="flex items-center gap-3 border-2 border-accent/40 p-3">
+              <div className="flex flex-1 items-center gap-2">
+                <StampLabel variant="accent" rotate="left">Fondo</StampLabel>
+                <span className="text-sm text-text-primary font-medium">Reinversión / Fondo</span>
+              </div>
+              <div className="w-36">
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={asignaciones.fondo || '0'}
+                  onChange={(e) => setAsignacion('fondo', e.target.value)}
+                />
+              </div>
+              <span className="text-sm text-text-secondary">€</span>
+            </div>
+          </div>
+
+          <div
+            className={`p-3 border ${excedePendiente ? 'border-danger/60 bg-danger-bg' : 'border-accent/40 bg-[#111]'}`}
+            style={{ fontFamily: '"JetBrains Mono", monospace' }}
           >
-            Distribuir equitativamente
-          </Button>
+            <p className="text-sm text-text-primary">
+              Tanda actual: {totalTanda.toFixed(2)} € · Pendiente tras guardar:{' '}
+              {(pendiente - totalTanda).toFixed(2)} €
+            </p>
+            {excedePendiente && (
+              <p className="text-xs text-danger mt-2" style={{ fontFamily: 'Inter, sans-serif' }}>
+                La tanda supera lo pendiente por repartir.
+              </p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={repartirPendienteEquitativamente}
+              disabled={guardando || socios.length === 0 || pendiente <= 0}
+            >
+              Repartir pendiente equitativamente
+            </Button>
+            <Button variant="primary" onClick={handleGuardar} disabled={!puedeGuardar || guardando}>
+              {guardando ? 'Guardando...' : 'Registrar tanda'}
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-3">
-          {/* Socios */}
-          {socios.map((socio) => (
-            <div key={socio.id} className="flex items-center gap-3 p-3 bg-[#0a0a0a] border border-border">
-              <div className="flex-1">
-                <span className="text-sm font-medium text-text-primary">{socio.nombre}</span>
-              </div>
-              <div className="w-32">
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={repartos[socio.id] || '0'}
-                  onChange={(e) => handleChange(socio.id, e.target.value)}
-                  placeholder="0.00"
-                />
-              </div>
-              <span className="text-sm text-text-secondary w-8">€</span>
+          <StampLabel rotate="left">Histórico de repartos</StampLabel>
+          {repartosIniciales.length === 0 ? (
+            <p className="text-sm text-text-secondary">Aún no hay repartos registrados en este evento.</p>
+          ) : (
+            <div className="space-y-2">
+              {repartosIniciales.map((item) => (
+                <div key={item.id} className="border border-border p-3 bg-[#0a0a0a]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm text-text-primary font-medium">{item.nombre}</p>
+                      <p className="text-xs text-text-secondary" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                        {item.fecha}{item.concepto ? ` · ${item.concepto}` : ''}
+                      </p>
+                    </div>
+                    <p className="text-sm text-accent font-semibold" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                      {Number(item.cantidad).toFixed(2)} €
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-
-          {/* Fondo empresa */}
-          <div className="flex items-center gap-3 p-3 bg-[#0a0a0a] border-2 border-accent/40">
-            <div className="flex-1 flex items-center gap-2">
-              <StampLabel variant="accent" rotate="left">Fondo</StampLabel>
-              <span className="text-sm font-medium text-text-primary">Fondo de empresa</span>
-            </div>
-            <div className="w-32">
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                value={repartos['fondo'] || '0'}
-                onChange={(e) => handleChange('fondo', e.target.value)}
-                placeholder="0.00"
-              />
-            </div>
-            <span className="text-sm text-text-secondary w-8">€</span>
-          </div>
-        </div>
-
-        {/* Resumen */}
-        <div
-          className={`p-4 border ${
-            esValido
-              ? 'bg-[#0a0a0a] border-accent/40'
-              : 'bg-danger-bg border-danger/60'
-          }`}
-          style={{ fontFamily: '"JetBrains Mono", monospace' }}
-        >
-          <div className="flex justify-between text-sm mb-1">
-            <span
-              className="text-text-secondary uppercase tracking-[0.08em] text-[11px]"
-              style={{ fontFamily: 'Inter, sans-serif' }}
-            >
-              Total repartido
-            </span>
-            <span className={esValido ? 'text-accent' : 'text-danger'}>
-              {totalRepartido.toFixed(2)} €
-            </span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span
-              className="text-text-secondary uppercase tracking-[0.08em] text-[11px]"
-              style={{ fontFamily: 'Inter, sans-serif' }}
-            >
-              Diferencia
-            </span>
-            <span className={esValido ? 'text-accent' : 'text-danger'}>
-              {diferencia.toFixed(2)} €
-            </span>
-          </div>
-          {!esValido && (
-            <p
-              className="text-xs text-danger mt-2"
-              style={{ fontFamily: 'Inter, sans-serif' }}
-            >
-              ⚠️ El reparto debe sumar exactamente {netoRepartible.toFixed(2)} €
-            </p>
           )}
-        </div>
-
-        <div className="flex justify-end">
-          <Button
-            variant="primary"
-            onClick={handleGuardar}
-            disabled={!esValido || guardando}
-          >
-            {guardando ? 'Guardando...' : 'Guardar reparto'}
-          </Button>
         </div>
       </div>
     </Card>

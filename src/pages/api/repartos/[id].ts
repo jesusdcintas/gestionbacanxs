@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { guardarReparto } from '../../../services/repartos';
+import { registrarRepartoEvento } from '../../../services/repartos';
 
 export const POST: APIRoute = async (context) => {
   try {
@@ -12,8 +12,12 @@ export const POST: APIRoute = async (context) => {
     }
 
     const body = await context.request.json();
-    
-    await guardarReparto(context, id, body.repartos);
+
+    await registrarRepartoEvento(context, id, {
+      fecha: String(body?.fecha || new Date().toISOString().slice(0, 10)),
+      concepto: body?.concepto ? String(body.concepto) : null,
+      repartos: Array.isArray(body?.repartos) ? body.repartos : [],
+    });
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,

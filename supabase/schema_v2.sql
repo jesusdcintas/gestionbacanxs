@@ -8,12 +8,15 @@
 
 -- Descomenta estas líneas si necesitas limpiar y empezar de cero:
 -- drop table if exists public.fondo_movimientos cascade;
+-- drop table if exists public.evento_trabajadores cascade;
 -- drop table if exists public.repartos_evento cascade;
 -- drop table if exists public.pagos_evento cascade;
 -- drop table if exists public.gastos cascade;
 -- drop table if exists public.eventos cascade;
 -- drop table if exists public.profiles cascade;
--- drop function if exists public.guardar_reparto_evento cascade;
+-- drop function if exists public.registrar_reparto_evento cascade;
+-- drop function if exists public.sync_evento_trabajadores cascade;
+-- drop function if exists public.resumen_trabajo_socios cascade;
 -- drop function if exists public.reembolsar_gasto cascade;
 
 -- ============================================================================
@@ -100,7 +103,33 @@ create table if not exists public.repartos_evento (
   evento_id uuid not null references public.eventos(id) on delete cascade,
   socio_id uuid references public.profiles(id),  -- null = fondo de empresa
   cantidad numeric(10,2) not null,
+  fecha date not null default current_date,
+  concepto text,
   created_at timestamptz default now()
+);
+
+-- Compatibilidad con bases existentes donde repartos_evento ya existia sin fecha/concepto
+alter table public.repartos_evento
+  add column if not exists fecha date,
+  add column if not exists concepto text;
+
+update public.repartos_evento
+set fecha = coalesce(fecha, (created_at::date), current_date)
+where fecha is null;
+
+alter table public.repartos_evento
+  alter column fecha set default current_date,
+  alter column fecha set not null;
+
+-- ============================================================================
+-- QUIEN TRABAJO EN CADA EVENTO
+-- ============================================================================
+
+create table if not exists public.evento_trabajadores (
+  evento_id uuid not null references public.eventos(id) on delete cascade,
+  socio_id uuid not null references public.profiles(id),
+  created_at timestamptz default now(),
+  primary key (evento_id, socio_id)
 );
 
 -- ============================================================================
@@ -141,6 +170,11 @@ create index if not exists idx_gastos_reembolsado on public.gastos (reembolsado)
 -- Repartos
 create index if not exists idx_repartos_evento_evento_id on public.repartos_evento (evento_id);
 create index if not exists idx_repartos_evento_socio_id on public.repartos_evento (socio_id);
+create index if not exists idx_repartos_evento_fecha on public.repartos_evento (fecha desc);
+
+-- Trabajadores
+create index if not exists idx_evento_trabajadores_evento_id on public.evento_trabajadores (evento_id);
+create index if not exists idx_evento_trabajadores_socio_id on public.evento_trabajadores (socio_id);
 
 -- Fondo movimientos
 create index if not exists idx_fondo_movimientos_fecha on public.fondo_movimientos (fecha desc);
@@ -183,6 +217,7 @@ alter table public.pagos_evento enable row level security;
 alter table public.gastos enable row level security;
 alter table public.repartos_evento enable row level security;
 alter table public.fondo_movimientos enable row level security;
+alter table public.evento_trabajadores enable row level security;
 
 -- Políticas: cualquier usuario autenticado puede leer y escribir
 -- (colectivo pequeño, sin separación por tenants)
@@ -193,6 +228,7 @@ drop policy if exists authenticated_all on public.pagos_evento;
 drop policy if exists authenticated_all on public.gastos;
 drop policy if exists authenticated_all on public.repartos_evento;
 drop policy if exists authenticated_all on public.fondo_movimientos;
+drop policy if exists authenticated_all on public.evento_trabajadores;
 
 create policy authenticated_all on public.profiles
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
@@ -212,31 +248,163 @@ create policy authenticated_all on public.repartos_evento
 create policy authenticated_all on public.fondo_movimientos
   for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
 
+create policy authenticated_all on public.evento_trabajadores
+  for all using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+
 -- ============================================================================
 -- FUNCIONES RPC (operaciones atómicas)
 -- ============================================================================
 
--- Función para guardar reparto de un evento (borra anteriores y guarda nuevos)
-create or replace function public.guardar_reparto_evento(
+-- Sincroniza quienes trabajaron fisicamente un evento
+create or replace function public.sync_evento_trabajadores(
   p_evento_id uuid,
-  p_repartos jsonb  -- Array de {socio_id: uuid | null, cantidad: numeric}
+  p_socios uuid[]
 )
 returns void
 language plpgsql
 security definer
 as $$
 begin
-  -- Borrar repartos anteriores
-  delete from public.repartos_evento where evento_id = p_evento_id;
-  
-  -- Insertar nuevos repartos
-  insert into public.repartos_evento (evento_id, socio_id, cantidad)
-  select 
-    p_evento_id,
-    (value->>'socio_id')::uuid,
-    (value->>'cantidad')::numeric
-  from jsonb_array_elements(p_repartos);
+  delete from public.evento_trabajadores et
+  where et.evento_id = p_evento_id
+    and not (et.socio_id = any (coalesce(p_socios, array[]::uuid[])));
+
+  insert into public.evento_trabajadores (evento_id, socio_id)
+  select p_evento_id, s
+  from unnest(coalesce(p_socios, array[]::uuid[])) as s
+  on conflict (evento_id, socio_id) do nothing;
 end;
+$$;
+
+-- Registra una nueva tanda de reparto (acumulativo, no sobrescribe)
+create or replace function public.registrar_reparto_evento(
+  p_evento_id uuid,
+  p_fecha date,
+  p_concepto text,
+  p_repartos jsonb
+)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_evento record;
+  v_neto_repartible numeric;
+  v_ya_repartido numeric;
+  v_tanda numeric;
+  v_restante numeric;
+  v_aporte_fondo numeric;
+begin
+  if p_repartos is null or jsonb_typeof(p_repartos) <> 'array' then
+    raise exception 'p_repartos debe ser un array jsonb';
+  end if;
+
+  select id, nombre, fecha, presupuesto, con_factura, retencion_irpf
+  into v_evento
+  from public.eventos
+  where id = p_evento_id;
+
+  if not found then
+    raise exception 'Evento no encontrado';
+  end if;
+
+  -- Neto repartible facturable: bruto -> quitar IVA 21% -> aplicar IRPF sobre base
+  select
+    (case
+      when v_evento.con_factura then (v_evento.presupuesto / 1.21)
+      else v_evento.presupuesto
+    end)
+    - (case
+      when v_evento.con_factura then ((v_evento.presupuesto / 1.21) * coalesce(v_evento.retencion_irpf, 0) / 100)
+      else 0
+    end)
+    - coalesce((select sum(g.cantidad) from public.gastos g where g.evento_id = p_evento_id), 0)
+  into v_neto_repartible;
+
+  select coalesce(sum(r.cantidad), 0)
+  into v_ya_repartido
+  from public.repartos_evento r
+  where r.evento_id = p_evento_id;
+
+  select coalesce(sum((elem->>'cantidad')::numeric), 0)
+  into v_tanda
+  from jsonb_array_elements(p_repartos) elem
+  where coalesce((elem->>'cantidad')::numeric, 0) > 0;
+
+  v_restante := v_neto_repartible - v_ya_repartido;
+
+  if v_tanda <= 0 then
+    raise exception 'La tanda debe incluir al menos una cantidad mayor que 0';
+  end if;
+
+  if v_tanda > v_restante + 0.01 then
+    raise exception 'La tanda (%.2f) supera lo pendiente (%.2f)', v_tanda, v_restante;
+  end if;
+
+  insert into public.repartos_evento (evento_id, socio_id, cantidad, fecha, concepto)
+  select
+    p_evento_id,
+    nullif(elem->>'socio_id', '')::uuid,
+    (elem->>'cantidad')::numeric,
+    coalesce(p_fecha, current_date),
+    nullif(trim(coalesce(p_concepto, '')), '')
+  from jsonb_array_elements(p_repartos) elem
+  where coalesce((elem->>'cantidad')::numeric, 0) > 0;
+
+  select coalesce(sum((elem->>'cantidad')::numeric), 0)
+  into v_aporte_fondo
+  from jsonb_array_elements(p_repartos) elem
+  where (elem->>'socio_id') is null
+    and coalesce((elem->>'cantidad')::numeric, 0) > 0;
+
+  if v_aporte_fondo > 0 then
+    insert into public.fondo_movimientos (fecha, concepto, cantidad, evento_id)
+    values (
+      coalesce(p_fecha, current_date),
+      coalesce(
+        nullif(trim(coalesce(p_concepto, '')), ''),
+        'Reparto a fondo del evento "' || coalesce(v_evento.nombre, p_evento_id::text) || '"'
+      ),
+      v_aporte_fondo,
+      p_evento_id
+    );
+  end if;
+end;
+$$;
+
+-- Resumen de carga de trabajo por socio y rango de fechas
+create or replace view public.v_eventos_trabajados_por_socio as
+select
+  et.socio_id,
+  p.nombre as socio_nombre,
+  e.fecha,
+  et.evento_id,
+  e.nombre as evento_nombre
+from public.evento_trabajadores et
+join public.eventos e on e.id = et.evento_id
+join public.profiles p on p.id = et.socio_id;
+
+create or replace function public.resumen_trabajo_socios(
+  p_fecha_desde date default null,
+  p_fecha_hasta date default null
+)
+returns table (
+  socio_id uuid,
+  socio_nombre text,
+  eventos_trabajados bigint
+)
+language sql
+security definer
+as $$
+  select
+    v.socio_id,
+    v.socio_nombre,
+    count(*)::bigint as eventos_trabajados
+  from public.v_eventos_trabajados_por_socio v
+  where (p_fecha_desde is null or v.fecha >= p_fecha_desde)
+    and (p_fecha_hasta is null or v.fecha <= p_fecha_hasta)
+  group by v.socio_id, v.socio_nombre
+  order by eventos_trabajados desc, v.socio_nombre asc;
 $$;
 
 -- Función para reembolsar un gasto (marca como reembolsado + registra movimiento en fondo)
