@@ -48,6 +48,7 @@ export default function GastosTable({
             <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Concepto</th>
             <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Fecha</th>
             <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Categoría</th>
+            <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Tipo</th>
             <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Evento</th>
             <th className="px-4 py-3 text-left text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Pagado por</th>
             <th className="px-4 py-3 text-right text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">Cantidad</th>
@@ -86,6 +87,13 @@ export default function GastosTable({
                   {formatDate(gasto.fecha)}
                 </td>
                 <td className="px-4 py-3 text-sm text-text-secondary">{gasto.categoria || 'Otros'}</td>
+                <td className="px-4 py-3 text-sm">
+                  {gasto.tipo_gasto === 'inversion_empresa' ? (
+                    <StampLabel rotate="none" variant="accent">Inversión</StampLabel>
+                  ) : (
+                    <StampLabel rotate="none" variant="outline">Evento</StampLabel>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-sm text-text-secondary">
                   {gasto.eventos?.nombre || <span className="italic">General</span>}
                 </td>

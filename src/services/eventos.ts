@@ -34,7 +34,11 @@ export async function getEventosConEstadoReparto(
 
   const [eventosRes, gastosRes, repartosRes] = await Promise.all([
     supabase.from('eventos').select('*').order('fecha', { ascending: false }),
-    supabase.from('gastos').select('evento_id, cantidad').not('evento_id', 'is', null),
+    supabase
+      .from('gastos')
+      .select('evento_id, cantidad')
+      .eq('tipo_gasto', 'directo_evento')
+      .not('evento_id', 'is', null),
     supabase.from('repartos_evento').select('evento_id, cantidad'),
   ]);
 

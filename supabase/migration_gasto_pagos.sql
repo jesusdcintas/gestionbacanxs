@@ -64,6 +64,7 @@ create or replace function public.guardar_gasto_con_pagos(
   p_concepto text,
   p_cantidad numeric,
   p_categoria text,
+  p_tipo_gasto text,
   p_fecha date,
   p_evento_id uuid,
   p_reembolsado boolean,
@@ -76,9 +77,20 @@ as $$
 declare
   v_gasto_id uuid;
   v_suma_fuentes numeric(10,2);
+  v_tipo_gasto text;
 begin
   if p_cantidad is null or p_cantidad <= 0 then
     raise exception 'La cantidad del gasto debe ser mayor a 0';
+  end if;
+
+  v_tipo_gasto := coalesce(nullif(trim(p_tipo_gasto), ''), 'directo_evento');
+
+  if v_tipo_gasto not in ('directo_evento', 'inversion_empresa') then
+    raise exception 'Tipo de gasto no válido';
+  end if;
+
+  if v_tipo_gasto = 'directo_evento' and p_evento_id is null then
+    raise exception 'Los gastos directos de evento deben tener evento_id';
   end if;
 
   if p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0 then
@@ -99,6 +111,7 @@ begin
       concepto,
       cantidad,
       categoria,
+      tipo_gasto,
       fecha,
       evento_id,
       reembolsado,
@@ -108,6 +121,7 @@ begin
       p_concepto,
       p_cantidad,
       coalesce(nullif(trim(p_categoria), ''), 'Otros'),
+      v_tipo_gasto,
       coalesce(p_fecha, current_date),
       p_evento_id,
       coalesce(p_reembolsado, false),
@@ -120,6 +134,7 @@ begin
       concepto = p_concepto,
       cantidad = p_cantidad,
       categoria = coalesce(nullif(trim(p_categoria), ''), 'Otros'),
+      tipo_gasto = v_tipo_gasto,
       fecha = coalesce(p_fecha, fecha),
       evento_id = p_evento_id,
       reembolsado = coalesce(p_reembolsado, false),

@@ -8,6 +8,8 @@ import { Plus } from 'lucide-react';
 import { getGastos } from '../../services/gastos';
 
 type Filtro = 'todos' | 'generales' | 'eventos';
+type TipoFiltro = 'todos' | 'directo_evento' | 'inversion_empresa';
+
 const filtroRaw = Astro.url.searchParams.get('filtro') ?? 'todos';
 const filtro: Filtro = (['todos', 'generales', 'eventos'] as Filtro[]).includes(
   filtroRaw as Filtro,
@@ -15,12 +17,26 @@ const filtro: Filtro = (['todos', 'generales', 'eventos'] as Filtro[]).includes(
   ? (filtroRaw as Filtro)
   : 'todos';
 
+const tipoRaw = Astro.url.searchParams.get('tipo') ?? 'todos';
+const tipoFiltro: TipoFiltro = (
+  ['todos', 'directo_evento', 'inversion_empresa'] as TipoFiltro[]
+).includes(tipoRaw as TipoFiltro)
+  ? (tipoRaw as TipoFiltro)
+  : 'todos';
+
 const todos = await getGastos(Astro);
 const generales = todos.filter((g) => g.evento_id === null);
 const deEventos = todos.filter((g) => g.evento_id !== null);
+const directos = todos.filter((g) => g.tipo_gasto === 'directo_evento');
+const inversiones = todos.filter((g) => g.tipo_gasto === 'inversion_empresa');
+
+const gastosBase =
+  filtro === 'generales' ? generales : filtro === 'eventos' ? deEventos : todos;
 
 const gastos =
-  filtro === 'generales' ? generales : filtro === 'eventos' ? deEventos : todos;
+  tipoFiltro === 'todos'
+    ? gastosBase
+    : gastosBase.filter((g) => g.tipo_gasto === tipoFiltro);
 
 const sumar = (arr: { cantidad: number }[]) =>
   arr.reduce((sum, g) => sum + Number(g.cantidad), 0);
@@ -36,6 +52,12 @@ const tabs: { value: Filtro; label: string; count: number }[] = [
   { value: 'todos', label: 'Todos', count: todos.length },
   { value: 'generales', label: 'Generales', count: generales.length },
   { value: 'eventos', label: 'De eventos', count: deEventos.length },
+];
+
+const tipoTabs: { value: TipoFiltro; label: string; count: number }[] = [
+  { value: 'todos', label: 'Todos los tipos', count: todos.length },
+  { value: 'directo_evento', label: 'Gasto del evento', count: directos.length },
+  { value: 'inversion_empresa', label: 'Inversión de empresa', count: inversiones.length },
 ];
 
 const emptyMessages: Record<Filtro, string> = {
@@ -96,9 +118,28 @@ const emptyMessages: Record<Filtro, string> = {
         const activo = t.value === filtro;
         return (
           <a
-            href={`/gastos?filtro=${t.value}`}
+            href={`/gastos?filtro=${t.value}&tipo=${tipoFiltro}`}
             class={`px-4 py-2 text-[11px] uppercase tracking-[0.08em] border-b-2 transition-colors ${
               activo ? 'border-accent text-accent' : 'border-transparent text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {t.label}
+            <span class="ml-2 text-[10px]" style="font-family: 'JetBrains Mono', monospace;">({t.count})</span>
+          </a>
+        );
+      })}
+    </div>
+
+    <div class="flex flex-wrap gap-2">
+      {tipoTabs.map((t) => {
+        const activo = t.value === tipoFiltro;
+        return (
+          <a
+            href={`/gastos?filtro=${filtro}&tipo=${t.value}`}
+            class={`px-3 py-1.5 text-[11px] uppercase tracking-[0.08em] border transition-colors ${
+              activo
+                ? 'border-accent text-accent bg-accent/10'
+                : 'border-border text-text-secondary hover:text-text-primary hover:border-border-strong'
             }`}
           >
             {t.label}

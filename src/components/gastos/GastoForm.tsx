@@ -19,13 +19,23 @@ interface Props {
   eventos: Evento[];
   profiles: Profile[];
   defaultEventoId?: string | null;
+  mode?: 'general' | 'evento';
 }
 
-export default function GastoForm({ gasto, eventos, profiles, defaultEventoId = null }: Props) {
+export default function GastoForm({
+  gasto,
+  eventos,
+  profiles,
+  defaultEventoId = null,
+  mode = 'general',
+}: Props) {
+  const modoEvento = mode === 'evento';
+
   const [formData, setFormData] = useState({
     concepto: gasto?.concepto || '',
     cantidad: gasto?.cantidad?.toString() || '',
     categoria: gasto?.categoria || 'Otros',
+    tipo_gasto: gasto?.tipo_gasto || (modoEvento ? 'directo_evento' : 'inversion_empresa'),
     fecha: gasto?.fecha || new Date().toISOString().split('T')[0],
     evento_id: gasto?.evento_id || defaultEventoId || '',
     reembolsado: Boolean(gasto?.reembolsado),
@@ -49,13 +59,16 @@ export default function GastoForm({ gasto, eventos, profiles, defaultEventoId = 
   );
   const diferencia = cantidadGasto - totalFuentes;
   const cuadra = Math.abs(diferencia) < 0.01;
+  const requiereEvento = formData.tipo_gasto === 'directo_evento';
+  const eventoValido = !requiereEvento || Boolean(formData.evento_id);
+  const puedeEnviar = cuadra && eventoValido;
 
   const setFuente = (key: string, value: string) => {
     setFuentes((prev) => ({ ...prev, [key]: value }));
   };
 
   const onSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    if (!cuadra) {
+    if (!puedeEnviar) {
       event.preventDefault();
     }
   };
@@ -124,24 +137,63 @@ export default function GastoForm({ gasto, eventos, profiles, defaultEventoId = 
             />
           </div>
 
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
-              Evento (opcional)
-            </label>
-            <select
-              name="evento_id"
-              value={formData.evento_id}
-              onChange={(e) => setFormData({ ...formData, evento_id: e.target.value })}
-              className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            >
-              <option value="">Sin evento asociado</option>
-              {eventos.map((evento) => (
-                <option key={evento.id} value={evento.id}>
-                  {evento.nombre} - {evento.fecha ? new Date(evento.fecha).toLocaleDateString('es-ES') : 'Sin fecha'}
-                </option>
-              ))}
-            </select>
-          </div>
+          {modoEvento ? (
+            <>
+              <input type="hidden" name="tipo_gasto" value="directo_evento" />
+              <input type="hidden" name="evento_id" value={formData.evento_id} />
+              <div>
+                <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
+                  Tipo de gasto
+                </label>
+                <div className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary">
+                  Gasto del evento (directo)
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
+                  Tipo de gasto
+                </label>
+                <select
+                  name="tipo_gasto"
+                  value={formData.tipo_gasto}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      tipo_gasto: e.target.value as 'directo_evento' | 'inversion_empresa',
+                    })
+                  }
+                  required
+                  className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="directo_evento">Gasto del evento</option>
+                  <option value="inversion_empresa">Inversión de empresa</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
+                  {requiereEvento ? 'Evento (obligatorio)' : '¿Relacionado con algún evento? (opcional)'}
+                </label>
+                <select
+                  name="evento_id"
+                  value={formData.evento_id}
+                  onChange={(e) => setFormData({ ...formData, evento_id: e.target.value })}
+                  required={requiereEvento}
+                  className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="">Sin evento asociado</option>
+                  {eventos.map((evento) => (
+                    <option key={evento.id} value={evento.id}>
+                      {evento.nombre} - {evento.fecha ? new Date(evento.fecha).toLocaleDateString('es-ES') : 'Sin fecha'}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
 
           <div className="md:col-span-2">
             <label className="flex items-center gap-2">
@@ -206,11 +258,16 @@ export default function GastoForm({ gasto, eventos, profiles, defaultEventoId = 
                 La suma de fuentes debe coincidir exactamente con la cantidad del gasto.
               </p>
             )}
+            {!eventoValido && (
+              <p className="mt-2 text-xs text-danger" style={{ fontFamily: 'Inter, sans-serif' }}>
+                Para un gasto del evento debes seleccionar un evento.
+              </p>
+            )}
           </div>
         </div>
 
         <div className="flex gap-3 pt-4">
-          <Button type="submit" variant="primary" disabled={!cuadra}>
+          <Button type="submit" variant="primary" disabled={!puedeEnviar}>
             {gasto ? 'Actualizar' : 'Crear Gasto'}
           </Button>
           <Button type="button" variant="secondary" onClick={() => (window.location.href = '/gastos')}>

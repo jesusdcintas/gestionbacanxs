@@ -93,6 +93,7 @@ create table if not exists public.gastos (
   concepto text not null,
   cantidad numeric(10,2) not null check (cantidad > 0),
   categoria text not null,
+  tipo_gasto text not null default 'directo_evento' check (tipo_gasto in ('directo_evento', 'inversion_empresa')),
   fecha date not null,
   evento_id uuid references public.eventos(id) on delete set null,
   pagado_por uuid references public.profiles(id),  -- null = pagado por la empresa
@@ -172,6 +173,7 @@ create index if not exists idx_pagos_evento_fecha on public.pagos_evento (fecha 
 create index if not exists idx_gastos_fecha on public.gastos (fecha desc);
 create index if not exists idx_gastos_evento_id on public.gastos (evento_id);
 create index if not exists idx_gastos_categoria on public.gastos (categoria);
+create index if not exists idx_gastos_tipo_gasto on public.gastos (tipo_gasto);
 create index if not exists idx_gastos_pagado_por on public.gastos (pagado_por);
 create index if not exists idx_gastos_reembolsado on public.gastos (reembolsado);
 
@@ -475,6 +477,7 @@ create or replace function public.guardar_gasto_con_pagos(
   p_concepto text,
   p_cantidad numeric,
   p_categoria text,
+  p_tipo_gasto text,
   p_fecha date,
   p_evento_id uuid,
   p_reembolsado boolean,
@@ -487,9 +490,20 @@ as $$
 declare
   v_gasto_id uuid;
   v_suma_fuentes numeric(10,2);
+  v_tipo_gasto text;
 begin
   if p_cantidad is null or p_cantidad <= 0 then
     raise exception 'La cantidad del gasto debe ser mayor a 0';
+  end if;
+
+  v_tipo_gasto := coalesce(nullif(trim(p_tipo_gasto), ''), 'directo_evento');
+
+  if v_tipo_gasto not in ('directo_evento', 'inversion_empresa') then
+    raise exception 'Tipo de gasto no válido';
+  end if;
+
+  if v_tipo_gasto = 'directo_evento' and p_evento_id is null then
+    raise exception 'Los gastos directos de evento deben tener evento_id';
   end if;
 
   if p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0 then
@@ -510,6 +524,7 @@ begin
       concepto,
       cantidad,
       categoria,
+      tipo_gasto,
       fecha,
       evento_id,
       reembolsado,
@@ -519,6 +534,7 @@ begin
       p_concepto,
       p_cantidad,
       coalesce(nullif(trim(p_categoria), ''), 'Otros'),
+      v_tipo_gasto,
       coalesce(p_fecha, current_date),
       p_evento_id,
       coalesce(p_reembolsado, false),
@@ -531,6 +547,7 @@ begin
       concepto = p_concepto,
       cantidad = p_cantidad,
       categoria = coalesce(nullif(trim(p_categoria), ''), 'Otros'),
+      tipo_gasto = v_tipo_gasto,
       fecha = coalesce(p_fecha, fecha),
       evento_id = p_evento_id,
       reembolsado = coalesce(p_reembolsado, false),

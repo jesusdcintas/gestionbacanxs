@@ -6,6 +6,7 @@ type Gasto = Database['public']['Tables']['gastos']['Row'];
 type GastoInsert = Database['public']['Tables']['gastos']['Insert'];
 type GastoUpdate = Database['public']['Tables']['gastos']['Update'];
 type GastoPago = Database['public']['Tables']['gasto_pagos']['Row'];
+export type TipoGasto = 'directo_evento' | 'inversion_empresa';
 
 export interface FuentePagoInput {
   socio_id: string | null;
@@ -91,6 +92,13 @@ export async function guardarGastoConPagos(
 
   const totalFuentes = fuentes.reduce((sum, f) => sum + f.cantidad, 0);
   const cantidadGasto = Number(gastoData.cantidad ?? 0);
+  const tipoGasto = (gastoData.tipo_gasto ?? 'directo_evento') as TipoGasto;
+  const eventoId = gastoData.evento_id ?? null;
+
+  if (tipoGasto === 'directo_evento' && !eventoId) {
+    throw new Error('Los gastos directos de evento deben estar vinculados a un evento.');
+  }
+
   if (Math.abs(totalFuentes - cantidadGasto) > 0.01) {
     throw new Error(
       `Las fuentes de pago (${totalFuentes.toFixed(2)}€) no coinciden con la cantidad del gasto (${cantidadGasto.toFixed(2)}€).`,
@@ -102,8 +110,9 @@ export async function guardarGastoConPagos(
     p_concepto: String(gastoData.concepto || ''),
     p_cantidad: cantidadGasto,
     p_categoria: String(gastoData.categoria || 'Otros'),
+    p_tipo_gasto: tipoGasto,
     p_fecha: String(gastoData.fecha || new Date().toISOString().slice(0, 10)),
-    p_evento_id: gastoData.evento_id ?? null,
+    p_evento_id: eventoId,
     p_reembolsado: Boolean(gastoData.reembolsado ?? false),
     p_fuentes: fuentes as any,
   });
@@ -153,6 +162,7 @@ export async function getGastosByEvento(context: APIContext, eventoId: string) {
     .from('gastos')
     .select('*, gasto_pagos(*, profiles(nombre))')
     .eq('evento_id', eventoId)
+    .eq('tipo_gasto', 'directo_evento')
     .order('fecha', { ascending: false });
 
   if (error) {

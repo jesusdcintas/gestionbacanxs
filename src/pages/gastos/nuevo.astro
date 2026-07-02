@@ -7,6 +7,8 @@ import { getProfiles } from '../../services/profiles';
 
 const eventos = await getEventos(Astro);
 const profiles = await getProfiles(Astro);
+const eventoParam = Astro.url.searchParams.get('evento');
+const modoEvento = Boolean(eventoParam);
 
 // Handle form submission
 if (Astro.request.method === 'POST') {
@@ -17,6 +19,7 @@ if (Astro.request.method === 'POST') {
       concepto: formData.get('concepto')?.toString() || '',
       cantidad: parseFloat(formData.get('cantidad')?.toString() || '0'),
       categoria: formData.get('categoria')?.toString() || 'Otros',
+      tipo_gasto: (formData.get('tipo_gasto')?.toString() || (modoEvento ? 'directo_evento' : 'inversion_empresa')) as 'directo_evento' | 'inversion_empresa',
       fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
       evento_id: formData.has('evento_id') && formData.get('evento_id') ? formData.get('evento_id')!.toString() : null,
       reembolsado: formData.get('reembolsado') === 'on',
@@ -34,7 +37,7 @@ if (Astro.request.method === 'POST') {
     ];
 
     await createGasto(Astro, gastoData, fuentes);
-    return Astro.redirect('/gastos');
+    return Astro.redirect(modoEvento && eventoParam ? `/eventos/${eventoParam}/detalle` : '/gastos');
   } catch (error) {
     console.error('Error creating gasto:', error);
   }
@@ -45,9 +48,19 @@ if (Astro.request.method === 'POST') {
   <div class="max-w-3xl mx-auto space-y-6">
     <div>
       <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Nuevo gasto</h1>
-      <p class="text-text-secondary mt-1">Registra una salida de dinero</p>
+      <p class="text-text-secondary mt-1">
+        {modoEvento
+          ? 'Registra un gasto directo del evento (afecta al neto repartible).'
+          : 'Registra una salida de dinero'}
+      </p>
     </div>
 
-    <GastoForm eventos={eventos} profiles={profiles} client:load />
+    <GastoForm
+      eventos={eventos}
+      profiles={profiles}
+      defaultEventoId={eventoParam}
+      mode={modoEvento ? 'evento' : 'general'}
+      client:load
+    />
   </div>
 </AppLayout>
