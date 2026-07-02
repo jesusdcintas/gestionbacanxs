@@ -114,6 +114,7 @@ export interface Database {
           categoria: string;
           fecha: string;
           evento_id: string | null;
+          // Campo legado: mantener mientras exista en bases antiguas
           pagado_por: string | null;
           reembolsado: boolean;
           created_by: string | null;
@@ -145,6 +146,30 @@ export interface Database {
           created_by?: string | null;
           created_at?: string | null;
           updated_at?: string | null;
+        };
+        Relationships: [];
+      };
+      gasto_pagos: {
+        Row: {
+          id: string;
+          gasto_id: string;
+          socio_id: string | null;
+          cantidad: number;
+          created_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          gasto_id: string;
+          socio_id?: string | null;
+          cantidad: number;
+          created_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          gasto_id?: string;
+          socio_id?: string | null;
+          cantidad?: number;
+          created_at?: string | null;
         };
         Relationships: [];
       };

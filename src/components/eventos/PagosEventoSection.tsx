@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
 import { StampLabel } from '../ui/StampLabel';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 interface Pago {
   id: string;
@@ -20,6 +21,9 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
   const [pagos, setPagos] = useState(pagosIniciales);
   const [showForm, setShowForm] = useState(false);
   const [editingPago, setEditingPago] = useState<Pago | null>(null);
+  const [deletingPagoId, setDeletingPagoId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     fecha: new Date().toISOString().split('T')[0],
     cantidad: '',
@@ -48,20 +52,25 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
     setShowForm(true);
   };
 
-  const handleDelete = async (pagoId: string) => {
-    if (!confirm('¿Eliminar este pago?')) return;
-    
+  const handleDelete = async () => {
+    if (!deletingPagoId) return;
+    setIsDeleting(true);
+    setErrorMessage(null);
+
     try {
-      const response = await fetch(`/api/pagos/${pagoId}`, {
+      const response = await fetch(`/api/pagos/${deletingPagoId}`, {
         method: 'DELETE',
       });
 
       if (!response.ok) throw new Error('Error al eliminar pago');
 
-      setPagos(pagos.filter(p => p.id !== pagoId));
+      setPagos(pagos.filter(p => p.id !== deletingPagoId));
+      setDeletingPagoId(null);
     } catch (error) {
       console.error('Error:', error);
-      alert('Error al eliminar el pago');
+      setErrorMessage('No se pudo eliminar el pago. Inténtalo de nuevo.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -76,6 +85,7 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
     };
 
     try {
+      setErrorMessage(null);
       if (editingPago) {
         // Actualizar
         const response = await fetch(`/api/pagos/${editingPago.id}`, {
@@ -105,7 +115,7 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
       resetForm();
     } catch (error) {
       console.error('Error:', error);
-      alert(editingPago ? 'Error al actualizar el pago' : 'Error al crear el pago');
+      setErrorMessage(editingPago ? 'No se pudo actualizar el pago.' : 'No se pudo crear el pago.');
     }
   };
 
@@ -173,6 +183,10 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
           </form>
         )}
 
+        {errorMessage ? (
+          <div className="border border-danger bg-danger-bg px-3 py-2 text-sm text-danger">{errorMessage}</div>
+        ) : null}
+
         {pagos.length === 0 ? (
           <p className="text-sm text-text-secondary text-center py-8">
             No hay pagos registrados para este evento
@@ -213,7 +227,7 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDelete(pago.id)}
+                    onClick={() => setDeletingPagoId(pago.id)}
                     className="text-[11px] uppercase tracking-[0.08em] text-danger hover:text-text-primary transition-colors"
                   >
                     Eliminar
@@ -223,6 +237,18 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
             ))}
           </div>
         )}
+
+        <ConfirmDialog
+          open={Boolean(deletingPagoId)}
+          title="Eliminar pago"
+          description="Esta acción eliminará el pago de forma permanente."
+          confirmLabel="Eliminar"
+          cancelLabel="Cancelar"
+          destructive
+          isLoading={isDeleting}
+          onClose={() => !isDeleting && setDeletingPagoId(null)}
+          onConfirm={handleDelete}
+        />
       </div>
     </Card>
   );

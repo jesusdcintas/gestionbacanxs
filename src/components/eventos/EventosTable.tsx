@@ -3,11 +3,16 @@ import { formatCurrency } from '../../lib/format';
 import { formatDate } from '../../lib/date';
 import type { Database } from '../../types/database';
 import type { EstadoFinanciero, EstadoTrabajo } from '../../utils/eventoEstado';
+import { StampLabel } from '../ui/StampLabel';
 
 type Evento = Database['public']['Tables']['eventos']['Row'];
+type EventoConEstadoReparto = Evento & {
+  reparto_completo?: boolean;
+  pendiente_reparto?: number;
+};
 
 interface Props {
-  eventos: Evento[];
+  eventos: EventoConEstadoReparto[];
   editBasePath: string;
 }
 
@@ -70,6 +75,7 @@ export default function EventosTable({ eventos, editBasePath }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('fecha');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [urlReady, setUrlReady] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const trabajoOptions: Array<{ value: EstadoTrabajo; label: string }> = useMemo(
     () => [
@@ -96,6 +102,7 @@ export default function EventosTable({ eventos, editBasePath }: Props) {
   ) => {
     try {
       setSavingById((curr) => ({ ...curr, [id]: true }));
+      setErrorMessage(null);
       const response = await fetch(`/api/eventos/${id}/estado`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -109,7 +116,7 @@ export default function EventosTable({ eventos, editBasePath }: Props) {
     } catch (error) {
       setEstados((curr) => ({ ...curr, [id]: previo }));
       const message = error instanceof Error ? error.message : 'Error al actualizar estado';
-      window.alert(message);
+      setErrorMessage(message);
     } finally {
       setSavingById((curr) => ({ ...curr, [id]: false }));
     }
@@ -290,6 +297,10 @@ export default function EventosTable({ eventos, editBasePath }: Props) {
 
   return (
     <div className="space-y-4">
+      {errorMessage ? (
+        <div className="border border-danger bg-danger-bg px-3 py-2 text-sm text-danger">{errorMessage}</div>
+      ) : null}
+
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -390,6 +401,9 @@ export default function EventosTable({ eventos, editBasePath }: Props) {
                 Trabajo <span>{sortIndicator('estado_trabajo')}</span>
               </button>
             </th>
+            <th className="px-4 py-3 text-center text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary">
+              Reparto
+            </th>
             <th className="px-4 py-3 text-center">
               <button
                 type="button"
@@ -451,6 +465,13 @@ export default function EventosTable({ eventos, editBasePath }: Props) {
                   </select>
                 </td>
                 <td className="px-4 py-3 text-center">
+                  {evento.reparto_completo ? (
+                    <StampLabel rotate="none" variant="accent">Completo</StampLabel>
+                  ) : (
+                    <StampLabel rotate="none" variant="danger">Pendiente</StampLabel>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-center">
                   <div className="space-y-1">
                     <select
                       value={estadoActual.estado_financiero}
@@ -479,7 +500,7 @@ export default function EventosTable({ eventos, editBasePath }: Props) {
           })}
           {eventosVisibles.length === 0 && (
             <tr>
-              <td colSpan={8} className="px-4 py-8 text-center text-sm text-text-secondary">
+              <td colSpan={9} className="px-4 py-8 text-center text-sm text-text-secondary">
                 No hay eventos para el cliente seleccionado.
               </td>
             </tr>

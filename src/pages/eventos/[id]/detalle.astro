@@ -2,9 +2,10 @@
 import AppLayout from '../../../layouts/AppLayout.astro';
 import PagosEventoSection from '../../../components/eventos/PagosEventoSection.tsx';
 import RepartoSection from '../../../components/eventos/RepartoSection.tsx';
+import DeleteEventoButton from '../../../components/eventos/DeleteEventoButton.tsx';
 import { Card } from '../../../components/ui/Card.tsx';
 import { StampLabel } from '../../../components/ui/StampLabel.tsx';
-import { getEventoCompleto } from '../../../services/eventos';
+import { getEventoCompleto, getEventos } from '../../../services/eventos';
 import { getPagosByEvento, getTotalPagadoEvento } from '../../../services/pagos';
 import { getGastosByEvento, getTotalGastosEvento } from '../../../services/gastos';
 import { getRepartosByEvento } from '../../../services/repartos';
@@ -25,15 +26,34 @@ if (!id) {
   return Astro.redirect('/eventos');
 }
 
-let evento, pagos, gastos, repartos, socios;
+let evento: any;
+let pagos: any[] = [];
+let gastos: any[] = [];
+let repartos: any[] = [];
+let socios: any[] = [];
+let eventoAnteriorId: string | null = null;
+let eventoSiguienteId: string | null = null;
 try {
-  [evento, pagos, gastos, repartos, socios] = await Promise.all([
+  const [eventoCompleto, pagosEvento, gastosEvento, repartosEvento, sociosEvento, eventosLista] = await Promise.all([
     getEventoCompleto(Astro, id),
     getPagosByEvento(Astro, id),
     getGastosByEvento(Astro, id),
     getRepartosByEvento(Astro, id),
     getProfiles(Astro),
+    getEventos(Astro),
   ]);
+
+  evento = eventoCompleto;
+  pagos = pagosEvento;
+  gastos = gastosEvento;
+  repartos = repartosEvento;
+  socios = sociosEvento;
+
+  const indiceActual = eventosLista.findIndex((e) => e.id === id);
+  if (indiceActual !== -1) {
+    eventoAnteriorId = eventosLista[indiceActual - 1]?.id ?? null;
+    eventoSiguienteId = eventosLista[indiceActual + 1]?.id ?? null;
+  }
 } catch (error) {
   console.error('Error loading evento detalle:', error);
   return Astro.redirect('/eventos');
@@ -66,6 +86,10 @@ const repartosFormateados = repartos.map((r) => ({
   created_at: r.created_at,
 }));
 
+const totalRepartido = repartosFormateados.reduce((sum, r) => sum + Number(r.cantidad), 0);
+const pendienteReparto = netoRepartible - totalRepartido;
+const repartoCompleto = pendienteReparto <= 0.01;
+
 const estadoVisible = getEstadoVisible(evento.estado_trabajo, evento.estado_financiero);
 const estadoStamp = getEstadoStamp(estadoVisible);
 ---
@@ -79,15 +103,37 @@ const estadoStamp = getEstadoStamp(estadoVisible);
           <StampLabel variant={estadoStamp.variant} rotate={estadoStamp.rotate}>
             {getEstadoVisibleLabel(estadoVisible)}
           </StampLabel>
+          <StampLabel variant={repartoCompleto ? 'accent' : 'danger'} rotate="none">
+            {repartoCompleto ? 'Reparto completo' : 'Reparto pendiente'}
+          </StampLabel>
         </div>
         <p class="text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">
           {evento.fecha} {evento.lugar ? `· ${evento.lugar}` : ''}
         </p>
       </div>
       <div class="flex gap-2">
+        {eventoAnteriorId ? (
+          <a href={`/eventos/${eventoAnteriorId}/detalle`} class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+            ← Evento anterior
+          </a>
+        ) : (
+          <span class="px-4 py-2 border border-border text-text-secondary text-sm opacity-50 cursor-not-allowed">
+            ← Evento anterior
+          </span>
+        )}
+        {eventoSiguienteId ? (
+          <a href={`/eventos/${eventoSiguienteId}/detalle`} class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+            Evento siguiente →
+          </a>
+        ) : (
+          <span class="px-4 py-2 border border-border text-text-secondary text-sm opacity-50 cursor-not-allowed">
+            Evento siguiente →
+          </span>
+        )}
         <a href={`/eventos/${id}`} class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
           Editar evento
         </a>
+        <DeleteEventoButton eventoId={id} client:load />
         <a href="/eventos" class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
           ← Volver
         </a>
@@ -267,24 +313,34 @@ const estadoStamp = getEstadoStamp(estadoVisible);
         </p>
       ) : (
         <div class="space-y-2">
-          {gastos.map((gasto) => (
-            <div class="flex items-center justify-between p-3 bg-[#0a0a0a] border border-border hover:border-border-strong transition-colors">
-              <div class="flex-1">
-                <p class="font-medium text-text-primary">{gasto.concepto}</p>
-                <div class="flex items-center gap-3 mt-1">
-                  <span class="text-xs text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">{gasto.fecha}</span>
-                  <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">{gasto.categoria}</span>
-                  {gasto.profiles && (
-                    <span class="text-[11px] uppercase tracking-[0.08em] text-text-primary">
-                      Pagado por: {gasto.profiles.nombre}
-                      {gasto.reembolsado && ' (reembolsado)'}
-                    </span>
-                  )}
+          {gastos.map((gasto) => {
+            const fuentes = (gasto.gasto_pagos ?? [])
+              .filter((f: any) => Number(f.cantidad) > 0)
+              .map((f: any) => {
+                const nombre = f.socio_id ? (f.profiles?.nombre ?? 'Socio') : 'Fondo';
+                return `${nombre} ${Number(f.cantidad).toFixed(2)}€`;
+              })
+              .join(' + ');
+
+            return (
+              <div class="flex items-center justify-between p-3 bg-[#0a0a0a] border border-border hover:border-border-strong transition-colors">
+                <div class="flex-1">
+                  <p class="font-medium text-text-primary">{gasto.concepto}</p>
+                  <div class="flex items-center gap-3 mt-1">
+                    <span class="text-xs text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">{gasto.fecha}</span>
+                    <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">{gasto.categoria}</span>
+                    {fuentes && (
+                      <span class="text-[11px] uppercase tracking-[0.08em] text-text-primary">
+                        Pagado con: {fuentes}
+                        {gasto.reembolsado && ' (reembolsado)'}
+                      </span>
+                    )}
+                  </div>
                 </div>
+                <span class="font-semibold text-danger" style="font-family: 'JetBrains Mono', monospace;">−{Number(gasto.cantidad).toFixed(2)} €</span>
               </div>
-              <span class="font-semibold text-danger" style="font-family: 'JetBrains Mono', monospace;">−{Number(gasto.cantidad).toFixed(2)} €</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Card>

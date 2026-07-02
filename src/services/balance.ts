@@ -49,25 +49,24 @@ export async function getBalanceSocios(context: APIContext): Promise<BalanceSoci
 
     const totalCobrado = repartos.reduce((sum, r) => sum + Number(r.cantidad), 0);
 
-    // Total aportado en gastos pagados de su bolsillo
-    const { data: gastos, error: gastosError } = await supabase
-      .from('gastos')
-      .select('cantidad, reembolsado')
-      .eq('pagado_por', socio.id);
+    // Total aportado en gastos de su bolsillo usando gasto_pagos
+    const { data: pagosSocio, error: pagosError } = await supabase
+      .from('gasto_pagos')
+      .select('cantidad, gastos!inner(reembolsado)')
+      .eq('socio_id', socio.id);
 
-    if (gastosError) {
-      console.error(`Error fetching gastos for socio ${socio.id}:`, gastosError);
+    if (pagosError) {
+      console.error(`Error fetching gasto_pagos for socio ${socio.id}:`, pagosError);
       continue;
     }
 
-    // Separar entre reembolsado y no reembolsado
-    const totalReembolsado = gastos
-      .filter(g => g.reembolsado)
-      .reduce((sum, g) => sum + Number(g.cantidad), 0);
+    const totalReembolsado = (pagosSocio ?? [])
+      .filter((p: any) => Boolean(p.gastos?.reembolsado))
+      .reduce((sum, p: any) => sum + Number(p.cantidad), 0);
 
-    const totalAportado = gastos
-      .filter(g => !g.reembolsado)
-      .reduce((sum, g) => sum + Number(g.cantidad), 0);
+    const totalAportado = (pagosSocio ?? [])
+      .filter((p: any) => !Boolean(p.gastos?.reembolsado))
+      .reduce((sum, p: any) => sum + Number(p.cantidad), 0);
 
     // Calcular balance
     const balance = calcularBalanceSocio(totalCobrado, totalAportado);
@@ -107,18 +106,21 @@ export async function getGastosPendientesReembolso(
   const supabase = getSupabaseServerClient(context);
 
   const { data, error } = await supabase
-    .from('gastos')
-    .select('*, eventos(nombre)')
-    .eq('pagado_por', socioId)
-    .eq('reembolsado', false)
-    .order('fecha', { ascending: false });
+    .from('gasto_pagos')
+    .select('cantidad, gastos!inner(*, eventos(nombre))')
+    .eq('socio_id', socioId)
+    .eq('gastos.reembolsado', false)
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error('Error fetching gastos pendientes:', error);
     throw new Error('No se pudieron cargar los gastos pendientes de reembolso');
   }
 
-  return data;
+  return (data ?? []).map((row: any) => ({
+    ...row.gastos,
+    cantidad_aportada: Number(row.cantidad),
+  }));
 }
 
 /**
@@ -145,13 +147,11 @@ export async function getAllGastosPendientes(
   const supabase = getSupabaseServerClient(context);
 
   const { data, error } = await supabase
-    .from('gastos')
-    .select(
-      'id, fecha, concepto, categoria, cantidad, pagado_por, evento_id, eventos(nombre), profiles!gastos_pagado_por_fkey(nombre)',
-    )
-    .not('pagado_por', 'is', null)
-    .eq('reembolsado', false)
-    .order('fecha', { ascending: false });
+    .from('gasto_pagos')
+    .select('cantidad, socio_id, gastos!inner(id, fecha, concepto, categoria, evento_id, reembolsado, eventos(nombre)), profiles(nombre)')
+    .not('socio_id', 'is', null)
+    .eq('gastos.reembolsado', false)
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error('Error fetching gastos pendientes:', error);
@@ -159,15 +159,15 @@ export async function getAllGastosPendientes(
   }
 
   return (data ?? []).map((g: any) => ({
-    id: g.id,
-    fecha: g.fecha,
-    concepto: g.concepto,
-    categoria: g.categoria,
+    id: g.gastos.id,
+    fecha: g.gastos.fecha,
+    concepto: g.gastos.concepto,
+    categoria: g.gastos.categoria,
     cantidad: Number(g.cantidad),
-    pagado_por: g.pagado_por,
-    evento_id: g.evento_id,
+    pagado_por: g.socio_id,
+    evento_id: g.gastos.evento_id,
     socio_nombre: g.profiles?.nombre ?? '—',
-    evento_nombre: g.eventos?.nombre ?? null,
+    evento_nombre: g.gastos.eventos?.nombre ?? null,
   }));
 }
 
@@ -181,18 +181,21 @@ export async function getGastosReembolsados(
   const supabase = getSupabaseServerClient(context);
 
   const { data, error } = await supabase
-    .from('gastos')
-    .select('*, eventos(nombre)')
-    .eq('pagado_por', socioId)
-    .eq('reembolsado', true)
-    .order('fecha', { ascending: false });
+    .from('gasto_pagos')
+    .select('cantidad, gastos!inner(*, eventos(nombre))')
+    .eq('socio_id', socioId)
+    .eq('gastos.reembolsado', true)
+    .order('created_at', { ascending: false });
 
   if (error) {
     console.error('Error fetching gastos reembolsados:', error);
     throw new Error('No se pudieron cargar los gastos reembolsados');
   }
 
-  return data;
+  return (data ?? []).map((row: any) => ({
+    ...row.gastos,
+    cantidad_aportada: Number(row.cantidad),
+  }));
 }
 
 /**

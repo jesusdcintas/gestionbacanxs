@@ -4,9 +4,9 @@ import EventosTable from '../../components/eventos/EventosTable.tsx';
 import { Button } from '../../components/ui/Button.tsx';
 import { Card } from '../../components/ui/Card.tsx';
 import { Plus } from 'lucide-react';
-import { getEventos } from '../../services/eventos';
+import { getEventosConEstadoReparto } from '../../services/eventos';
 
-const eventos = await getEventos(Astro);
+const eventos = await getEventosConEstadoReparto(Astro);
 ---
 
 <AppLayout title="Eventos">

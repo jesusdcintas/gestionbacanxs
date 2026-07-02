@@ -5,6 +5,17 @@ import type { Database } from '../types/database';
 type Gasto = Database['public']['Tables']['gastos']['Row'];
 type GastoInsert = Database['public']['Tables']['gastos']['Insert'];
 type GastoUpdate = Database['public']['Tables']['gastos']['Update'];
+type GastoPago = Database['public']['Tables']['gasto_pagos']['Row'];
+
+export interface FuentePagoInput {
+  socio_id: string | null;
+  cantidad: number;
+}
+
+export type GastoConFuentes = Gasto & {
+  eventos?: { nombre: string } | null;
+  gasto_pagos?: (GastoPago & { profiles?: { nombre: string } | null })[];
+};
 
 export const CATEGORIAS_GASTO = [
   'Transporte',
@@ -16,12 +27,18 @@ export const CATEGORIAS_GASTO = [
   'Otros',
 ] as const;
 
+const GASTO_SELECT = `
+  *,
+  eventos(nombre),
+  gasto_pagos(*, profiles(nombre))
+`;
+
 export async function getGastos(context: APIContext) {
   const supabase = getSupabaseServerClient(context);
-  
+
   const { data, error } = await supabase
     .from('gastos')
-    .select('*, eventos(nombre), profiles!gastos_pagado_por_fkey(nombre)')
+    .select(GASTO_SELECT)
     .order('fecha', { ascending: false });
 
   if (error) {
@@ -29,10 +46,7 @@ export async function getGastos(context: APIContext) {
     throw new Error('No se pudieron cargar los gastos');
   }
 
-  return data as (Gasto & { 
-    eventos?: { nombre: string } | null;
-    profiles?: { nombre: string } | null;
-  })[];
+  return data as GastoConFuentes[];
 }
 
 export async function getGasto(context: APIContext, id: string) {
@@ -40,7 +54,7 @@ export async function getGasto(context: APIContext, id: string) {
 
   const { data, error } = await supabase
     .from('gastos')
-    .select('*, eventos(nombre), profiles!gastos_pagado_por_fkey(nombre)')
+    .select(GASTO_SELECT)
     .eq('id', id)
     .single();
 
@@ -49,68 +63,82 @@ export async function getGasto(context: APIContext, id: string) {
     throw new Error('No se pudo cargar el gasto');
   }
 
-  return data as Gasto & {
-    eventos?: { nombre: string } | null;
-    profiles?: { nombre: string } | null;
-  };
+  return data as GastoConFuentes;
 }
 
-export async function createGasto(context: APIContext, gasto: GastoInsert) {
+/**
+ * Guarda gasto + fuentes de pago de forma atómica.
+ * Si gastoId es null, crea gasto nuevo. Si existe, actualiza gasto existente.
+ */
+export async function guardarGastoConPagos(
+  context: APIContext,
+  gastoData: GastoInsert | GastoUpdate,
+  fuentesPago: FuentePagoInput[],
+  gastoId: string | null = null,
+) {
   const supabase = getSupabaseServerClient(context);
-  
-  // Obtener el usuario actual
-  const { data: { user } } = await supabase.auth.getUser();
-  
-  const gastoData = {
-    ...gasto,
-    created_by: user?.id || null,
-  };
-  
-  const { data, error } = await supabase
-    .from('gastos')
-    .insert(gastoData)
-    .select()
-    .single();
 
-  if (error) {
-    console.error('Error creating gasto:', error);
-    throw new Error('No se pudo crear el gasto');
+  const fuentes = fuentesPago
+    .map((f) => ({
+      socio_id: f.socio_id,
+      cantidad: Number(f.cantidad),
+    }))
+    .filter((f) => f.cantidad > 0);
+
+  if (fuentes.length === 0) {
+    throw new Error('Debes indicar al menos una fuente de pago con cantidad mayor a 0');
   }
 
-  return data as Gasto;
+  const totalFuentes = fuentes.reduce((sum, f) => sum + f.cantidad, 0);
+  const cantidadGasto = Number(gastoData.cantidad ?? 0);
+  if (Math.abs(totalFuentes - cantidadGasto) > 0.01) {
+    throw new Error(
+      `Las fuentes de pago (${totalFuentes.toFixed(2)}€) no coinciden con la cantidad del gasto (${cantidadGasto.toFixed(2)}€).`,
+    );
+  }
+
+  const { data, error } = await supabase.rpc('guardar_gasto_con_pagos', {
+    p_gasto_id: gastoId,
+    p_concepto: String(gastoData.concepto || ''),
+    p_cantidad: cantidadGasto,
+    p_categoria: String(gastoData.categoria || 'Otros'),
+    p_fecha: String(gastoData.fecha || new Date().toISOString().slice(0, 10)),
+    p_evento_id: gastoData.evento_id ?? null,
+    p_reembolsado: Boolean(gastoData.reembolsado ?? false),
+    p_fuentes: fuentes as any,
+  });
+
+  if (error) {
+    console.error('Error guardando gasto con pagos:', error);
+    throw new Error(`No se pudo guardar el gasto: ${error.message}`);
+  }
+
+  const gastoGuardadoId = String(data);
+  return getGasto(context, gastoGuardadoId);
 }
 
-export async function updateGasto(context: APIContext, id: string, gasto: GastoUpdate) {
-  const supabase = getSupabaseServerClient(context);
-  
-  console.log('Actualizando gasto en Supabase:', id, JSON.stringify(gasto, null, 2));
-  
-  const { data, error } = await supabase
-    .from('gastos')
-    .update(gasto)
-    .eq('id', id)
-    .select()
-    .single();
+// Wrappers de compatibilidad
+export async function createGasto(
+  context: APIContext,
+  gasto: GastoInsert,
+  fuentesPago: FuentePagoInput[],
+) {
+  return guardarGastoConPagos(context, gasto, fuentesPago, null);
+}
 
-  if (error) {
-    console.error('Error de Supabase al actualizar gasto:', error);
-    console.error('Código de error:', error.code);
-    console.error('Mensaje:', error.message);
-    console.error('Detalles:', error.details);
-    throw new Error(`No se pudo actualizar el gasto: ${error.message} (${error.code})`);
-  }
-
-  console.log('Gasto actualizado exitosamente:', data);
-  return data as Gasto;
+export async function updateGasto(
+  context: APIContext,
+  id: string,
+  gasto: GastoUpdate,
+  fuentesPago: FuentePagoInput[],
+) {
+  return guardarGastoConPagos(context, gasto, fuentesPago, id);
 }
 
 export async function deleteGasto(context: APIContext, id: string) {
   const supabase = getSupabaseServerClient(context);
-  
-  const { error } = await supabase
-    .from('gastos')
-    .delete()
-    .eq('id', id);
+
+  const { error } = await supabase.from('gastos').delete().eq('id', id);
 
   if (error) {
     console.error('Error deleting gasto:', error);
@@ -118,15 +146,12 @@ export async function deleteGasto(context: APIContext, id: string) {
   }
 }
 
-/**
- * Obtiene los gastos de un evento específico
- */
 export async function getGastosByEvento(context: APIContext, eventoId: string) {
   const supabase = getSupabaseServerClient(context);
-  
+
   const { data, error } = await supabase
     .from('gastos')
-    .select('*, profiles!gastos_pagado_por_fkey(nombre)')
+    .select('*, gasto_pagos(*, profiles(nombre))')
     .eq('evento_id', eventoId)
     .order('fecha', { ascending: false });
 
@@ -135,18 +160,17 @@ export async function getGastosByEvento(context: APIContext, eventoId: string) {
     throw new Error('No se pudieron cargar los gastos del evento');
   }
 
-  return data as (Gasto & { profiles?: { nombre: string } | null })[];
+  return data as (Gasto & {
+    gasto_pagos?: (GastoPago & { profiles?: { nombre: string } | null })[];
+  })[];
 }
 
-/**
- * Obtiene gastos generales (sin evento asociado)
- */
 export async function getGastosGenerales(context: APIContext) {
   const supabase = getSupabaseServerClient(context);
-  
+
   const { data, error } = await supabase
     .from('gastos')
-    .select('*, profiles!gastos_pagado_por_fkey(nombre)')
+    .select('*, gasto_pagos(*, profiles(nombre))')
     .is('evento_id', null)
     .order('fecha', { ascending: false });
 
@@ -155,62 +179,17 @@ export async function getGastosGenerales(context: APIContext) {
     throw new Error('No se pudieron cargar los gastos generales');
   }
 
-  return data as (Gasto & { profiles?: { nombre: string } | null })[];
-}
-
-/**
- * Obtiene gastos pagados por la empresa (pagado_por = null)
- */
-export async function getGastosPagadosEmpresa(context: APIContext) {
-  const supabase = getSupabaseServerClient(context);
-  
-  const { data, error } = await supabase
-    .from('gastos')
-    .select('*, eventos(nombre)')
-    .is('pagado_por', null)
-    .order('fecha', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching gastos pagados empresa:', error);
-    throw new Error('No se pudieron cargar los gastos pagados por la empresa');
-  }
-
-  return data as (Gasto & { eventos?: { nombre: string } | null })[];
-}
-
-/**
- * Obtiene gastos pagados por socios (pagado_por != null)
- */
-export async function getGastosPagadosSocios(context: APIContext) {
-  const supabase = getSupabaseServerClient(context);
-  
-  const { data, error } = await supabase
-    .from('gastos')
-    .select('*, eventos(nombre), profiles!gastos_pagado_por_fkey(nombre)')
-    .not('pagado_por', 'is', null)
-    .order('fecha', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching gastos pagados socios:', error);
-    throw new Error('No se pudieron cargar los gastos pagados por socios');
-  }
-
-  return data as (Gasto & { 
-    eventos?: { nombre: string } | null;
-    profiles?: { nombre: string } | null;
+  return data as (Gasto & {
+    gasto_pagos?: (GastoPago & { profiles?: { nombre: string } | null })[];
   })[];
 }
 
-/**
- * Obtiene gastos pendientes de reembolso (pagado_por != null y reembolsado = false)
- */
 export async function getGastosPendientesReembolso(context: APIContext) {
   const supabase = getSupabaseServerClient(context);
-  
+
   const { data, error } = await supabase
     .from('gastos')
-    .select('*, eventos(nombre), profiles!gastos_pagado_por_fkey(nombre)')
-    .not('pagado_por', 'is', null)
+    .select('*, eventos(nombre), gasto_pagos(*, profiles(nombre))')
     .eq('reembolsado', false)
     .order('fecha', { ascending: false });
 
@@ -219,15 +198,12 @@ export async function getGastosPendientesReembolso(context: APIContext) {
     throw new Error('No se pudieron cargar los gastos pendientes de reembolso');
   }
 
-  return data as (Gasto & { 
-    eventos?: { nombre: string } | null;
-    profiles?: { nombre: string } | null;
-  })[];
+  // Solo pendientes con aportación de socios (socio_id != null)
+  return (data as any[]).filter((g) =>
+    (g.gasto_pagos ?? []).some((gp: any) => gp.socio_id !== null),
+  ) as GastoConFuentes[];
 }
 
-/**
- * Calcula el total de gastos de un evento
- */
 export async function getTotalGastosEvento(context: APIContext, eventoId: string): Promise<number> {
   const gastos = await getGastosByEvento(context, eventoId);
   return gastos.reduce((total, gasto) => total + Number(gasto.cantidad), 0);

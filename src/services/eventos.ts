@@ -1,10 +1,18 @@
 import type { APIContext } from 'astro';
 import { getSupabaseServerClient } from '../lib/supabase';
 import type { Database } from '../types/database';
+import { calcularNetoRepartibleEvento } from '../utils/finanzas';
 
 type Evento = Database['public']['Tables']['eventos']['Row'];
 type EventoInsert = Database['public']['Tables']['eventos']['Insert'];
 type EventoUpdate = Database['public']['Tables']['eventos']['Update'];
+
+export type EventoConEstadoReparto = Evento & {
+  neto_repartible: number;
+  total_repartido: number;
+  pendiente_reparto: number;
+  reparto_completo: boolean;
+};
 
 export async function getEventos(context: APIContext) {
   const supabase = getSupabaseServerClient(context);
@@ -17,6 +25,64 @@ export async function getEventos(context: APIContext) {
   }
 
   return data as Evento[];
+}
+
+export async function getEventosConEstadoReparto(
+  context: APIContext,
+): Promise<EventoConEstadoReparto[]> {
+  const supabase = getSupabaseServerClient(context);
+
+  const [eventosRes, gastosRes, repartosRes] = await Promise.all([
+    supabase.from('eventos').select('*').order('fecha', { ascending: false }),
+    supabase.from('gastos').select('evento_id, cantidad').not('evento_id', 'is', null),
+    supabase.from('repartos_evento').select('evento_id, cantidad'),
+  ]);
+
+  if (eventosRes.error || gastosRes.error || repartosRes.error) {
+    console.error('Error fetching eventos con estado reparto:', {
+      eventos: eventosRes.error,
+      gastos: gastosRes.error,
+      repartos: repartosRes.error,
+    });
+    throw new Error('No se pudieron cargar los eventos');
+  }
+
+  const gastosPorEvento = new Map<string, number>();
+  for (const g of gastosRes.data ?? []) {
+    if (!g.evento_id) continue;
+    gastosPorEvento.set(
+      g.evento_id,
+      (gastosPorEvento.get(g.evento_id) ?? 0) + Number(g.cantidad),
+    );
+  }
+
+  const repartidoPorEvento = new Map<string, number>();
+  for (const r of repartosRes.data ?? []) {
+    repartidoPorEvento.set(
+      r.evento_id,
+      (repartidoPorEvento.get(r.evento_id) ?? 0) + Number(r.cantidad),
+    );
+  }
+
+  return (eventosRes.data ?? []).map((evento) => {
+    const totalGastos = gastosPorEvento.get(evento.id) ?? 0;
+    const totalRepartido = repartidoPorEvento.get(evento.id) ?? 0;
+    const netoRepartible = calcularNetoRepartibleEvento(
+      Number(evento.presupuesto),
+      Boolean(evento.con_factura),
+      Number(evento.retencion_irpf),
+      totalGastos,
+    );
+    const pendienteReparto = netoRepartible - totalRepartido;
+
+    return {
+      ...evento,
+      neto_repartible: netoRepartible,
+      total_repartido: totalRepartido,
+      pendiente_reparto: pendienteReparto,
+      reparto_completo: pendienteReparto <= 0.01,
+    };
+  });
 }
 
 export async function getEvento(context: APIContext, id: string) {
@@ -86,7 +152,7 @@ export async function getEventoCompleto(context: APIContext, id: string) {
     .select(`
       *,
       pagos_evento(*),
-      gastos(*, profiles!gastos_pagado_por_fkey(nombre)),
+      gastos(*, gasto_pagos(*, profiles(nombre))),
       repartos_evento(*, profiles(nombre))
     `)
     .eq('id', id)

@@ -43,6 +43,7 @@ export default function RepartoSection({
   const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
   const [concepto, setConcepto] = useState('');
   const [guardando, setGuardando] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const yaRepartido = useMemo(
     () => repartosIniciales.reduce((sum, r) => sum + Number(r.cantidad), 0),
@@ -77,7 +78,7 @@ export default function RepartoSection({
 
     const monto = Number(pendiente.toFixed(2));
     if (monto <= 0) {
-      window.alert('No hay saldo pendiente para repartir.');
+      setErrorMessage('No hay saldo pendiente para repartir.');
       return;
     }
 
@@ -100,7 +101,7 @@ export default function RepartoSection({
 
   const handleGuardar = async () => {
     if (!puedeGuardar) {
-      window.alert('La tanda supera lo pendiente por repartir o está vacía');
+      setErrorMessage('La tanda supera lo pendiente por repartir o está vacía.');
       return;
     }
 
@@ -117,6 +118,7 @@ export default function RepartoSection({
 
     setGuardando(true);
     try {
+      setErrorMessage(null);
       const response = await fetch(`/api/repartos/${eventoId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -136,7 +138,7 @@ export default function RepartoSection({
       window.location.reload();
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Error al guardar reparto';
-      window.alert(msg);
+      setErrorMessage(msg);
     } finally {
       setGuardando(false);
     }
@@ -145,6 +147,10 @@ export default function RepartoSection({
   return (
     <Card>
       <div className="space-y-5">
+        {errorMessage ? (
+          <div className="border border-danger bg-danger-bg px-3 py-2 text-sm text-danger">{errorMessage}</div>
+        ) : null}
+
         <div className="flex flex-col gap-2">
           <StampLabel rotate="right">Repartos acumulativos</StampLabel>
           <p className="text-sm text-text-secondary">

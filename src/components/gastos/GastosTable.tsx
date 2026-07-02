@@ -7,7 +7,11 @@ type Gasto = Database['public']['Tables']['gastos']['Row'];
 
 type GastoEnriquecido = Gasto & {
   eventos?: { nombre: string } | null;
-  profiles?: { nombre: string } | null;
+  gasto_pagos?: (
+    Database['public']['Tables']['gasto_pagos']['Row'] & {
+      profiles?: { nombre: string } | null;
+    }
+  )[];
 };
 
 interface Props {
@@ -51,8 +55,20 @@ export default function GastosTable({
         </thead>
         <tbody>
           {gastos.map((gasto) => {
-            const pagadoEmpresa = gasto.pagado_por === null;
-            const socioNombre = gasto.profiles?.nombre ?? '—';
+            const fuentes = (gasto.gasto_pagos ?? []).filter((f) => Number(f.cantidad) > 0);
+            const totalSocios = fuentes
+              .filter((f) => f.socio_id !== null)
+              .reduce((sum, f) => sum + Number(f.cantidad), 0);
+
+            const fuenteTexto =
+              fuentes.length === 0
+                ? '—'
+                : fuentes
+                    .map((f) => {
+                      const nombre = f.socio_id === null ? 'Fondo' : (f.profiles?.nombre ?? 'Socio');
+                      return `${nombre} ${formatCurrency(Number(f.cantidad))}`;
+                    })
+                    .join(' + ');
 
             return (
               <tr
@@ -74,18 +90,15 @@ export default function GastosTable({
                   {gasto.eventos?.nombre || <span className="italic">General</span>}
                 </td>
                 <td className="px-4 py-3 text-sm">
-                  {pagadoEmpresa ? (
-                    <span className="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Empresa</span>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="text-text-primary">{socioNombre}</span>
-                      {gasto.reembolsado ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-text-primary">{fuenteTexto}</span>
+                    {totalSocios > 0 &&
+                      (gasto.reembolsado ? (
                         <StampLabel rotate="none" variant="accent">Reembolsado</StampLabel>
                       ) : (
                         <StampLabel rotate="none" variant="danger">Pendiente</StampLabel>
-                      )}
-                    </div>
-                  )}
+                      ))}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-right text-sm text-danger" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                   −{formatCurrency(gasto.cantidad)}

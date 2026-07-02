@@ -1,7 +1,7 @@
 ---
 import AppLayout from '../../layouts/AppLayout.astro';
 import EventoForm from '../../components/eventos/EventoForm.tsx';
-import { getEvento, updateEvento } from '../../services/eventos';
+import { getEvento, getEventos, updateEvento } from '../../services/eventos';
 import { getRepartosByEvento } from '../../services/repartos';
 import { getTotalGastosEvento } from '../../services/gastos';
 import { getProfiles } from '../../services/profiles';
@@ -19,15 +19,30 @@ let totalGastosEvento = 0;
 let socios: Awaited<ReturnType<typeof getProfiles>> = [];
 let repartos = [];
 let trabajadores = [];
+let eventoAnteriorId: string | null = null;
+let eventoSiguienteId: string | null = null;
 
 try {
-  [evento, totalGastosEvento, socios, repartos, trabajadores] = await Promise.all([
+  const [eventoActual, totalGastos, sociosLista, repartosLista, trabajadoresLista, eventosLista] = await Promise.all([
     getEvento(Astro, id),
     getTotalGastosEvento(Astro, id),
     getProfiles(Astro),
     getRepartosByEvento(Astro, id),
     getTrabajadoresByEvento(Astro, id),
+    getEventos(Astro),
   ]);
+
+  evento = eventoActual;
+  totalGastosEvento = totalGastos;
+  socios = sociosLista;
+  repartos = repartosLista;
+  trabajadores = trabajadoresLista;
+
+  const indiceActual = eventosLista.findIndex((e) => e.id === id);
+  if (indiceActual !== -1) {
+    eventoAnteriorId = eventosLista[indiceActual - 1]?.id ?? null;
+    eventoSiguienteId = eventosLista[indiceActual + 1]?.id ?? null;
+  }
 } catch (error) {
   console.error('Error loading evento:', error);
   return Astro.redirect('/eventos');
@@ -84,6 +99,30 @@ if (Astro.request.method === 'POST') {
     <div>
       <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Editar evento</h1>
       <p class="text-text-secondary mt-1">Modifica datos, estado y trabajadores del evento.</p>
+    </div>
+
+    <div class="flex flex-wrap gap-2">
+      {eventoAnteriorId ? (
+        <a href={`/eventos/${eventoAnteriorId}`} class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+          ← Evento anterior
+        </a>
+      ) : (
+        <span class="px-4 py-2 border border-border text-text-secondary text-sm opacity-50 cursor-not-allowed">
+          ← Evento anterior
+        </span>
+      )}
+      {eventoSiguienteId ? (
+        <a href={`/eventos/${eventoSiguienteId}`} class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+          Evento siguiente →
+        </a>
+      ) : (
+        <span class="px-4 py-2 border border-border text-text-secondary text-sm opacity-50 cursor-not-allowed">
+          Evento siguiente →
+        </span>
+      )}
+      <a href={`/eventos/${id}/detalle`} class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+        Ver detalle
+      </a>
     </div>
 
     <EventoForm

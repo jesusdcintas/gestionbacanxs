@@ -3,6 +3,7 @@ import AppLayout from '../../layouts/AppLayout.astro';
 import GastoForm from '../../components/gastos/GastoForm.tsx';
 import { getGasto, updateGasto } from '../../services/gastos';
 import { getEventos } from '../../services/eventos';
+import { getProfiles } from '../../services/profiles';
 
 const { id } = Astro.params;
 
@@ -19,6 +20,7 @@ try {
 }
 
 const eventos = await getEventos(Astro);
+const profiles = await getProfiles(Astro);
 
 // Handle form submission
 if (Astro.request.method === 'POST') {
@@ -31,11 +33,23 @@ if (Astro.request.method === 'POST') {
       categoria: formData.get('categoria')?.toString() || 'Otros',
       fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
       evento_id: formData.has('evento_id') && formData.get('evento_id') ? formData.get('evento_id')!.toString() : null,
+      reembolsado: formData.get('reembolsado') === 'on',
     };
+
+    const fuentes = [
+      ...profiles.map((p) => ({
+        socio_id: p.id,
+        cantidad: parseFloat(formData.get(`fuente_${p.id}`)?.toString() || '0'),
+      })),
+      {
+        socio_id: null,
+        cantidad: parseFloat(formData.get('fuente_fondo')?.toString() || '0'),
+      },
+    ];
 
     console.log('Datos del gasto a actualizar:', JSON.stringify(gastoData, null, 2));
     
-    await updateGasto(Astro, id, gastoData);
+    await updateGasto(Astro, id, gastoData, fuentes);
     return Astro.redirect('/gastos');
   } catch (error) {
     console.error('Error updating gasto:', error);
@@ -55,6 +69,6 @@ if (Astro.request.method === 'POST') {
       <p class="text-text-secondary mt-1">Modifica los detalles del gasto</p>
     </div>
 
-    <GastoForm gasto={gasto} eventos={eventos} client:load />
+    <GastoForm gasto={gasto} eventos={eventos} profiles={profiles} client:load />
   </div>
 </AppLayout>
