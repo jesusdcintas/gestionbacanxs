@@ -112,7 +112,7 @@ export interface Database {
           concepto: string;
           cantidad: number;
           categoria: string;
-          tipo_gasto: 'directo_evento' | 'inversion_empresa';
+          tipo_gasto: 'directo_evento' | 'inversion_empresa' | 'consumible';
           fecha: string;
           evento_id: string | null;
           // Campo legado: mantener mientras exista en bases antiguas
@@ -127,7 +127,7 @@ export interface Database {
           concepto: string;
           cantidad: number;
           categoria: string;
-          tipo_gasto?: 'directo_evento' | 'inversion_empresa';
+          tipo_gasto?: 'directo_evento' | 'inversion_empresa' | 'consumible';
           fecha: string;
           evento_id?: string | null;
           pagado_por?: string | null;
@@ -141,7 +141,7 @@ export interface Database {
           concepto?: string;
           cantidad?: number;
           categoria?: string;
-          tipo_gasto?: 'directo_evento' | 'inversion_empresa';
+          tipo_gasto?: 'directo_evento' | 'inversion_empresa' | 'consumible';
           fecha?: string;
           evento_id?: string | null;
           pagado_por?: string | null;
@@ -183,6 +183,8 @@ export interface Database {
           fecha: string;
           cantidad: number;
           concepto: string | null;
+          recibido_por: string | null;
+          metodo_pago: 'efectivo' | 'banco';
           created_by: string | null;
           created_at: string | null;
         };
@@ -192,6 +194,8 @@ export interface Database {
           fecha: string;
           cantidad: number;
           concepto?: string | null;
+          recibido_por?: string | null;
+          metodo_pago?: 'efectivo' | 'banco';
           created_by?: string | null;
           created_at?: string | null;
         };
@@ -201,6 +205,8 @@ export interface Database {
           fecha?: string;
           cantidad?: number;
           concepto?: string | null;
+          recibido_por?: string | null;
+          metodo_pago?: 'efectivo' | 'banco';
           created_by?: string | null;
           created_at?: string | null;
         };

@@ -6,7 +6,7 @@ type Gasto = Database['public']['Tables']['gastos']['Row'];
 type GastoInsert = Database['public']['Tables']['gastos']['Insert'];
 type GastoUpdate = Database['public']['Tables']['gastos']['Update'];
 type GastoPago = Database['public']['Tables']['gasto_pagos']['Row'];
-export type TipoGasto = 'directo_evento' | 'inversion_empresa';
+export type TipoGasto = 'directo_evento' | 'inversion_empresa' | 'consumible';
 
 export interface FuentePagoInput {
   socio_id: string | null;
@@ -86,20 +86,21 @@ export async function guardarGastoConPagos(
     }))
     .filter((f) => f.cantidad > 0);
 
-  if (fuentes.length === 0) {
-    throw new Error('Debes indicar al menos una fuente de pago con cantidad mayor a 0');
-  }
-
   const totalFuentes = fuentes.reduce((sum, f) => sum + f.cantidad, 0);
   const cantidadGasto = Number(gastoData.cantidad ?? 0);
   const tipoGasto = (gastoData.tipo_gasto ?? 'directo_evento') as TipoGasto;
   const eventoId = gastoData.evento_id ?? null;
+  const requiereFuentesExactas = tipoGasto === 'inversion_empresa' || tipoGasto === 'consumible';
 
   if (tipoGasto === 'directo_evento' && !eventoId) {
     throw new Error('Los gastos directos de evento deben estar vinculados a un evento.');
   }
 
-  if (Math.abs(totalFuentes - cantidadGasto) > 0.01) {
+  if (requiereFuentesExactas && fuentes.length === 0) {
+    throw new Error('Debes indicar al menos una fuente de pago con cantidad mayor a 0');
+  }
+
+  if (requiereFuentesExactas && Math.abs(totalFuentes - cantidadGasto) > 0.01) {
     throw new Error(
       `Las fuentes de pago (${totalFuentes.toFixed(2)}€) no coinciden con la cantidad del gasto (${cantidadGasto.toFixed(2)}€).`,
     );
@@ -152,6 +153,21 @@ export async function deleteGasto(context: APIContext, id: string) {
   if (error) {
     console.error('Error deleting gasto:', error);
     throw new Error('No se pudo eliminar el gasto');
+  }
+}
+
+export async function eliminarGasto(context: APIContext, id: string) {
+  return deleteGasto(context, id);
+}
+
+export async function eliminarGastosMasivo(context: APIContext, ids: string[]) {
+  const supabase = getSupabaseServerClient(context);
+
+  const { error } = await supabase.from('gastos').delete().in('id', ids);
+
+  if (error) {
+    console.error('Error deleting gastos masivo:', error);
+    throw new Error('No se pudieron eliminar los gastos seleccionados');
   }
 }
 
@@ -217,4 +233,22 @@ export async function getGastosPendientesReembolso(context: APIContext) {
 export async function getTotalGastosEvento(context: APIContext, eventoId: string): Promise<number> {
   const gastos = await getGastosByEvento(context, eventoId);
   return gastos.reduce((total, gasto) => total + Number(gasto.cantidad), 0);
+}
+
+export async function cambiarPagadorMasivo(
+  context: APIContext,
+  gastoIds: string[],
+  socioId: string | null,
+) {
+  const supabase = getSupabaseServerClient(context);
+
+  const { error } = await supabase.rpc('cambiar_pagador_masivo', {
+    p_gasto_ids: gastoIds,
+    p_socio_id: socioId,
+  });
+
+  if (error) {
+    console.error('Error cambiando pagador masivo:', error);
+    throw new Error(`No se pudo cambiar el pagador: ${error.message}`);
+  }
 }

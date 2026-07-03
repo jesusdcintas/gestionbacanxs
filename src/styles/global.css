@@ -17,6 +17,8 @@
 	--accent-hover: #c2eb35;
 	--danger: #e2433f;
 	--danger-bg: #2a1413;
+	--consumible: #f59e0b;
+	--consumible-ink: #0a0a0a;
 }
 
 /* Tokens accesibles a Tailwind v4 */
@@ -33,6 +35,8 @@
 	--color-accent-hover: #c2eb35;
 	--color-danger: #e2433f;
 	--color-danger-bg: #2a1413;
+	--color-consumible: #f59e0b;
+	--color-consumible-ink: #0a0a0a;
 
 	--font-display: 'Archivo Black', sans-serif;
 	--font-sans: 'Inter', sans-serif;

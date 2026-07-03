@@ -1,18 +1,21 @@
 import { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { Select } from '../ui/Select';
 import { Card } from '../ui/Card';
 import type { Database } from '../../types/database';
 
 type Ingreso = Database['public']['Tables']['pagos_evento']['Row'];
 type Evento = Database['public']['Tables']['eventos']['Row'];
+type Profile = Database['public']['Tables']['profiles']['Row'];
 
 interface Props {
   ingreso?: Ingreso;
   eventos: Evento[];
+  profiles: Profile[];
 }
 
-export default function IngresoForm({ ingreso, eventos }: Props) {
+export default function IngresoForm({ ingreso, eventos, profiles }: Props) {
   const eventoInicial = ingreso?.evento_id || eventos[0]?.id || '';
 
   const [formData, setFormData] = useState({
@@ -20,9 +23,12 @@ export default function IngresoForm({ ingreso, eventos }: Props) {
     cantidad: ingreso?.cantidad?.toString() || '',
     fecha: ingreso?.fecha || new Date().toISOString().split('T')[0],
     evento_id: eventoInicial,
+    recibido_por: ingreso?.recibido_por || '',
+    metodo_pago: ingreso?.metodo_pago || 'banco',
   });
 
   const sinEventos = eventos.length === 0;
+  const sinProfiles = profiles.length === 0;
 
   return (
     <Card>
@@ -71,17 +77,49 @@ export default function IngresoForm({ ingreso, eventos }: Props) {
             />
           </div>
 
+          <div>
+            <Select
+              label="¿Quién cobró?"
+              name="recibido_por"
+              value={formData.recibido_por}
+              onChange={(e) => setFormData({ ...formData, recibido_por: e.target.value })}
+              required
+              disabled={sinProfiles}
+            >
+              <option value="">Selecciona quién cobró</option>
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.nombre}
+                </option>
+              ))}
+            </Select>
+            {sinProfiles && (
+              <p className="mt-2 text-xs text-text-secondary">
+                Crea perfiles antes de registrar ingresos.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <Select
+              label="Forma de cobro"
+              name="metodo_pago"
+              value={formData.metodo_pago}
+              onChange={(e) => setFormData({ ...formData, metodo_pago: e.target.value })}
+            >
+              <option value="banco">Banco</option>
+              <option value="efectivo">Efectivo</option>
+            </Select>
+          </div>
+
           <div className="md:col-span-2">
-            <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
-              Evento
-            </label>
-            <select
+            <Select
+              label="Evento"
               name="evento_id"
               value={formData.evento_id}
               onChange={(e) => setFormData({ ...formData, evento_id: e.target.value })}
               required
               disabled={sinEventos}
-              className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
               {sinEventos && <option value="">No hay eventos disponibles</option>}
               {eventos.map((evento) => (
@@ -89,7 +127,7 @@ export default function IngresoForm({ ingreso, eventos }: Props) {
                   {evento.nombre} - {new Date(evento.fecha).toLocaleDateString('es-ES')}
                 </option>
               ))}
-            </select>
+            </Select>
             {sinEventos && (
               <p className="mt-2 text-xs text-text-secondary">
                 Crea un evento antes de registrar ingresos.

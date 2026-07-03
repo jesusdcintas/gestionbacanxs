@@ -80,9 +80,126 @@ create table if not exists public.pagos_evento (
   fecha date not null,
   cantidad numeric(10,2) not null check (cantidad > 0),
   concepto text,
+  recibido_por uuid references public.profiles(id),
+  metodo_pago text default 'banco' check (metodo_pago in ('efectivo', 'banco')),
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz default now()
 );
+
+create or replace function public.cambiar_pagador_masivo(
+  p_gasto_ids uuid[],
+  p_socio_id uuid
+)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_gasto_id uuid;
+begin
+  foreach v_gasto_id in array p_gasto_ids loop
+    delete from public.gasto_pagos where gasto_id = v_gasto_id;
+
+    insert into public.gasto_pagos (gasto_id, socio_id, cantidad)
+    select v_gasto_id, p_socio_id, cantidad
+    from public.gastos
+    where id = v_gasto_id;
+  end loop;
+end;
+$$;
+
+create or replace function public.cambiar_receptor_masivo(
+  p_pago_ids uuid[],
+  p_socio_id uuid
+)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  update public.pagos_evento
+  set recibido_por = p_socio_id
+  where id = any(p_pago_ids);
+end;
+$$;
+
+create or replace function public.cobrar_y_repartir(
+  p_evento_id uuid,
+  p_fecha date,
+  p_cantidad numeric,
+  p_recibido_por uuid,
+  p_metodo_pago text,
+  p_concepto_pago text,
+  p_repartos jsonb
+)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_reparto jsonb;
+  v_total_repartos numeric := 0;
+  v_metodo_pago text := coalesce(nullif(lower(trim(p_metodo_pago)), ''), 'banco');
+begin
+  if p_cantidad is null or p_cantidad <= 0 then
+    raise exception 'La cantidad cobrada debe ser mayor que 0';
+  end if;
+
+  if p_recibido_por is null then
+    raise exception 'Debes indicar quién cobró el pago';
+  end if;
+
+  if v_metodo_pago not in ('efectivo', 'banco') then
+    raise exception 'Método de cobro no válido';
+  end if;
+
+  insert into public.pagos_evento (
+    evento_id,
+    fecha,
+    cantidad,
+    concepto,
+    recibido_por,
+    metodo_pago
+  ) values (
+    p_evento_id,
+    coalesce(p_fecha, current_date),
+    p_cantidad,
+    nullif(trim(p_concepto_pago), ''),
+    p_recibido_por,
+    v_metodo_pago
+  );
+
+  if p_repartos is not null and jsonb_typeof(p_repartos) = 'array' then
+    select coalesce(sum((item->>'cantidad')::numeric), 0)
+    into v_total_repartos
+    from jsonb_array_elements(p_repartos) item
+    where coalesce((item->>'cantidad')::numeric, 0) > 0;
+
+    if v_total_repartos > p_cantidad + 0.01 then
+      raise exception 'La suma del reparto (%.2f) supera la cantidad cobrada (%.2f)', v_total_repartos, p_cantidad;
+    end if;
+
+    for v_reparto in select * from jsonb_array_elements(p_repartos)
+    loop
+      if coalesce((v_reparto->>'cantidad')::numeric, 0) > 0 then
+        insert into public.repartos_evento (
+          evento_id,
+          socio_id,
+          cantidad,
+          fecha,
+          concepto
+        ) values (
+          p_evento_id,
+          nullif(v_reparto->>'socio_id', '')::uuid,
+          (v_reparto->>'cantidad')::numeric,
+          coalesce(p_fecha, current_date),
+          coalesce(nullif(trim(v_reparto->>'concepto'), ''), nullif(trim(p_concepto_pago), ''))
+        );
+      end if;
+    end loop;
+  end if;
+end;
+$$;
 
 -- ============================================================================
 -- GASTOS (de eventos o generales de empresa)
@@ -93,7 +210,7 @@ create table if not exists public.gastos (
   concepto text not null,
   cantidad numeric(10,2) not null check (cantidad > 0),
   categoria text not null,
-  tipo_gasto text not null default 'directo_evento' check (tipo_gasto in ('directo_evento', 'inversion_empresa')),
+  tipo_gasto text not null default 'directo_evento' check (tipo_gasto in ('directo_evento', 'inversion_empresa', 'consumible')),
   fecha date not null,
   evento_id uuid references public.eventos(id) on delete set null,
   pagado_por uuid references public.profiles(id),  -- null = pagado por la empresa
@@ -392,6 +509,47 @@ begin
 end;
 $$;
 
+create or replace function public.editar_reparto(
+  p_reparto_id uuid,
+  p_fecha date,
+  p_concepto text,
+  p_cantidad numeric
+)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  update public.repartos_evento
+  set
+    fecha = p_fecha,
+    concepto = p_concepto,
+    cantidad = p_cantidad
+  where id = p_reparto_id;
+
+  if not found then
+    raise exception 'Reparto no encontrado';
+  end if;
+end;
+$$;
+
+create or replace function public.eliminar_reparto(
+  p_reparto_id uuid
+)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  delete from public.repartos_evento
+  where id = p_reparto_id;
+
+  if not found then
+    raise exception 'Reparto no encontrado';
+  end if;
+end;
+$$;
+
 -- Resumen de carga de trabajo por socio y rango de fechas
 create or replace view public.v_eventos_trabajados_por_socio as
 select
@@ -491,6 +649,7 @@ declare
   v_gasto_id uuid;
   v_suma_fuentes numeric(10,2);
   v_tipo_gasto text;
+  v_total_fondo numeric(10,2);
 begin
   if p_cantidad is null or p_cantidad <= 0 then
     raise exception 'La cantidad del gasto debe ser mayor a 0';
@@ -498,7 +657,7 @@ begin
 
   v_tipo_gasto := coalesce(nullif(trim(p_tipo_gasto), ''), 'directo_evento');
 
-  if v_tipo_gasto not in ('directo_evento', 'inversion_empresa') then
+  if v_tipo_gasto not in ('directo_evento', 'inversion_empresa', 'consumible') then
     raise exception 'Tipo de gasto no válido';
   end if;
 
@@ -506,16 +665,16 @@ begin
     raise exception 'Los gastos directos de evento deben tener evento_id';
   end if;
 
-  if p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0 then
+  if v_tipo_gasto in ('inversion_empresa', 'consumible') and (p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0) then
     raise exception 'Debes enviar al menos una fuente de pago';
   end if;
 
   select coalesce(sum((x.value->>'cantidad')::numeric), 0)
   into v_suma_fuentes
-  from jsonb_array_elements(p_fuentes) x
+  from jsonb_array_elements(coalesce(p_fuentes, '[]'::jsonb)) x
   where coalesce((x.value->>'cantidad')::numeric, 0) > 0;
 
-  if abs(v_suma_fuentes - p_cantidad) > 0.01 then
+  if v_tipo_gasto in ('inversion_empresa', 'consumible') and abs(v_suma_fuentes - p_cantidad) > 0.01 then
     raise exception 'La suma de fuentes (%) no coincide con la cantidad del gasto (%)', v_suma_fuentes, p_cantidad;
   end if;
 
@@ -563,15 +722,177 @@ begin
     delete from public.gasto_pagos where gasto_id = v_gasto_id;
   end if;
 
+  -- El movimiento de salida del fondo se recalcula por completo al guardar el gasto.
+  -- Se eliminan salidas previas de este gasto (excepto reembolsos a socios).
+  delete from public.fondo_movimientos
+  where gasto_id = v_gasto_id
+    and cantidad < 0
+    and coalesce(concepto, '') not like 'Reembolso a socios:%'
+    and coalesce(concepto, '') not like 'Reembolso a socio:%';
+
   insert into public.gasto_pagos (gasto_id, socio_id, cantidad)
   select
     v_gasto_id,
     nullif(value->>'socio_id', '')::uuid,
     (value->>'cantidad')::numeric
-  from jsonb_array_elements(p_fuentes)
+  from jsonb_array_elements(coalesce(p_fuentes, '[]'::jsonb))
   where coalesce((value->>'cantidad')::numeric, 0) > 0;
 
+  select coalesce(sum(gp.cantidad), 0)
+  into v_total_fondo
+  from public.gasto_pagos gp
+  where gp.gasto_id = v_gasto_id
+    and gp.socio_id is null;
+
+  if v_total_fondo > 0 then
+    insert into public.fondo_movimientos (fecha, concepto, cantidad, evento_id, gasto_id)
+    values (
+      coalesce(p_fecha, current_date),
+      p_concepto,
+      -v_total_fondo,
+      p_evento_id,
+      v_gasto_id
+    );
+  end if;
+
   return v_gasto_id;
+end;
+$$;
+
+create or replace function public.convertir_gasto_en_aportacion(
+  p_gasto_id uuid,
+  p_socio_id uuid,
+  p_cantidad numeric,
+  p_concepto_gasto text
+)
+returns void
+language plpgsql
+security definer
+as $$
+declare
+  v_match numeric(10,2);
+begin
+  if p_cantidad is null or p_cantidad <= 0 then
+    raise exception 'La cantidad debe ser mayor a 0';
+  end if;
+
+  if p_gasto_id is null or p_socio_id is null then
+    raise exception 'gasto_id y socio_id son obligatorios';
+  end if;
+
+  select coalesce(sum(gp.cantidad), 0)
+  into v_match
+  from public.gasto_pagos gp
+  join public.gastos g on g.id = gp.gasto_id
+  where gp.gasto_id = p_gasto_id
+    and gp.socio_id = p_socio_id
+    and g.reembolsado = false;
+
+  if v_match <= 0 then
+    raise exception 'No existe un pendiente para ese socio y gasto';
+  end if;
+
+  if p_cantidad - v_match > 0.01 then
+    raise exception 'La cantidad a convertir supera el pendiente del socio en ese gasto';
+  end if;
+
+  update public.gastos
+  set reembolsado = true,
+      updated_at = now()
+  where id = p_gasto_id;
+
+  insert into public.aportaciones (socio_id, cantidad, fecha, concepto, created_by)
+  values (
+    p_socio_id,
+    p_cantidad,
+    current_date,
+    'Aportación por gasto no reembolsado: ' || p_concepto_gasto,
+    auth.uid()
+  );
+end;
+$$;
+
+create or replace function public.liquidar_diferencia_socios(
+  p_socio_acreedor_id uuid,
+  p_cantidad numeric,
+  p_pagar_desde_fondo boolean,
+  p_fecha date default current_date,
+  p_concepto text default null
+)
+returns jsonb
+language plpgsql
+security definer
+as $$
+declare
+  v_restante numeric(10,2);
+  v_aplicado numeric(10,2) := 0;
+  v_gastos_marcados integer := 0;
+  v_gasto record;
+begin
+  if p_socio_acreedor_id is null then
+    raise exception 'El socio acreedor es obligatorio';
+  end if;
+
+  if p_cantidad is null or p_cantidad <= 0 then
+    raise exception 'La cantidad a liquidar debe ser mayor a 0';
+  end if;
+
+  v_restante := p_cantidad;
+
+  -- Criterio simple y seguro: FIFO por gastos completos, sin parcial.
+  -- Solo se marcan gastos en los que los pagos de socios pertenecen al acreedor.
+  for v_gasto in
+    select
+      g.id,
+      g.fecha,
+      g.concepto,
+      sum(gp.cantidad)::numeric(10,2) as cantidad_socio
+    from public.gastos g
+    join public.gasto_pagos gp on gp.gasto_id = g.id
+    where g.reembolsado = false
+      and gp.socio_id = p_socio_acreedor_id
+      and not exists (
+        select 1
+        from public.gasto_pagos gp2
+        where gp2.gasto_id = g.id
+          and gp2.socio_id is not null
+          and gp2.socio_id <> p_socio_acreedor_id
+      )
+    group by g.id, g.fecha, g.concepto, g.created_at
+    order by g.fecha asc, g.created_at asc, g.id asc
+  loop
+    exit when v_restante <= 0;
+
+    if v_gasto.cantidad_socio <= v_restante + 0.01 then
+      update public.gastos
+      set reembolsado = true,
+          updated_at = now()
+      where id = v_gasto.id;
+
+      v_aplicado := v_aplicado + v_gasto.cantidad_socio;
+      v_restante := greatest(v_restante - v_gasto.cantidad_socio, 0);
+      v_gastos_marcados := v_gastos_marcados + 1;
+    end if;
+  end loop;
+
+  if p_pagar_desde_fondo and v_aplicado > 0 then
+    insert into public.fondo_movimientos (fecha, concepto, cantidad)
+    values (
+      coalesce(p_fecha, current_date),
+      coalesce(nullif(trim(p_concepto), ''), 'Liquidación de diferencia entre socios'),
+      -v_aplicado
+    );
+  end if;
+
+  return jsonb_build_object(
+    'socio_acreedor_id', p_socio_acreedor_id,
+    'cantidad_solicitada', round(p_cantidad, 2),
+    'cantidad_aplicada', round(v_aplicado, 2),
+    'cantidad_no_aplicada', round(greatest(p_cantidad - v_aplicado, 0), 2),
+    'gastos_marcados', v_gastos_marcados,
+    'pagado_desde_fondo', p_pagar_desde_fondo,
+    'criterio', 'FIFO sin parcial por gasto'
+  );
 end;
 $$;
 

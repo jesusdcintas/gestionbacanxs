@@ -10,6 +10,8 @@ export const POST: APIRoute = async (context) => {
       fecha: body.fecha,
       cantidad: body.cantidad,
       concepto: body.concepto || null,
+      recibido_por: body.recibido_por || null,
+      metodo_pago: body.metodo_pago || 'banco',
     });
 
     return new Response(JSON.stringify(pago), {

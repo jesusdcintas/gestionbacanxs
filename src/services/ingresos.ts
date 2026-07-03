@@ -6,12 +6,17 @@ type Ingreso = Database['public']['Tables']['pagos_evento']['Row'];
 type IngresoInsert = Database['public']['Tables']['pagos_evento']['Insert'];
 type IngresoUpdate = Database['public']['Tables']['pagos_evento']['Update'];
 
+export type IngresoConRecibo = Ingreso & {
+  eventos?: { nombre: string } | null;
+  recibido_por_profile?: { nombre: string } | null;
+};
+
 export async function getIngresos(context: APIContext) {
   const supabase = getSupabaseServerClient(context);
   
   const { data, error } = await supabase
     .from('pagos_evento')
-    .select('*, eventos(nombre)')
+    .select('*, eventos(nombre), recibido_por_profile:profiles!pagos_evento_recibido_por_fkey(nombre)')
     .order('fecha', { ascending: false });
 
   if (error) {
@@ -19,7 +24,7 @@ export async function getIngresos(context: APIContext) {
     throw new Error('No se pudieron cargar los ingresos');
   }
 
-  return data as (Ingreso & { eventos?: { nombre: string } | null })[];
+  return data as IngresoConRecibo[];
 }
 
 export async function getIngreso(context: APIContext, id: string) {
@@ -27,7 +32,7 @@ export async function getIngreso(context: APIContext, id: string) {
   
   const { data, error } = await supabase
     .from('pagos_evento')
-    .select('*, eventos(nombre)')
+    .select('*, eventos(nombre), recibido_por_profile:profiles!pagos_evento_recibido_por_fkey(nombre)')
     .eq('id', id)
     .single();
 
@@ -36,7 +41,7 @@ export async function getIngreso(context: APIContext, id: string) {
     throw new Error('No se pudo cargar el ingreso');
   }
 
-  return data as Ingreso & { eventos?: { nombre: string } | null };
+  return data as IngresoConRecibo;
 }
 
 export async function createIngreso(context: APIContext, ingreso: IngresoInsert) {
@@ -53,7 +58,7 @@ export async function createIngreso(context: APIContext, ingreso: IngresoInsert)
   const { data, error } = await supabase
     .from('pagos_evento')
     .insert(ingresoData)
-    .select()
+    .select('*, eventos(nombre), recibido_por_profile:profiles!pagos_evento_recibido_por_fkey(nombre)')
     .single();
 
   if (error) {
@@ -61,7 +66,7 @@ export async function createIngreso(context: APIContext, ingreso: IngresoInsert)
     throw new Error('No se pudo crear el ingreso');
   }
 
-  return data as Ingreso;
+  return data as IngresoConRecibo;
 }
 
 export async function updateIngreso(context: APIContext, id: string, ingreso: IngresoUpdate) {
@@ -73,7 +78,7 @@ export async function updateIngreso(context: APIContext, id: string, ingreso: In
     .from('pagos_evento')
     .update(ingreso)
     .eq('id', id)
-    .select()
+    .select('*, eventos(nombre), recibido_por_profile:profiles!pagos_evento_recibido_por_fkey(nombre)')
     .single();
 
   if (error) {
@@ -85,7 +90,7 @@ export async function updateIngreso(context: APIContext, id: string, ingreso: In
   }
 
   console.log('Ingreso actualizado exitosamente:', data);
-  return data as Ingreso;
+  return data as IngresoConRecibo;
 }
 
 export async function deleteIngreso(context: APIContext, id: string) {
@@ -99,5 +104,23 @@ export async function deleteIngreso(context: APIContext, id: string) {
   if (error) {
     console.error('Error deleting ingreso:', error);
     throw new Error('No se pudo eliminar el ingreso');
+  }
+}
+
+export async function cambiarReceptorMasivo(
+  context: APIContext,
+  pagoIds: string[],
+  socioId: string | null,
+) {
+  const supabase = getSupabaseServerClient(context);
+
+  const { error } = await supabase.rpc('cambiar_receptor_masivo', {
+    p_pago_ids: pagoIds,
+    p_socio_id: socioId,
+  });
+
+  if (error) {
+    console.error('Error cambiando receptor masivo:', error);
+    throw new Error(`No se pudo cambiar el receptor: ${error.message}`);
   }
 }

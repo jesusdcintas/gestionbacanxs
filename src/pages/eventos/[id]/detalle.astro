@@ -1,7 +1,8 @@
 ---
 import AppLayout from '../../../layouts/AppLayout.astro';
 import PagosEventoSection from '../../../components/eventos/PagosEventoSection.tsx';
-import RepartoSection from '../../../components/eventos/RepartoSection.tsx';
+import CobroYRepartoAhora from '../../../components/eventos/CobroYRepartoAhora.tsx';
+import FinanzasEventoPanel from '../../../components/eventos/FinanzasEventoPanel.tsx';
 import DeleteEventoButton from '../../../components/eventos/DeleteEventoButton.tsx';
 import { Card } from '../../../components/ui/Card.tsx';
 import { StampLabel } from '../../../components/ui/StampLabel.tsx';
@@ -15,7 +16,6 @@ import {
   calcularBaseImponible,
   calcularIVA,
   calcularIngresoNeto,
-  calcularNetoRepartible,
   calcularRetencionIRPF,
 } from '../../../utils/finanzas';
 import { getEstadoStamp, getEstadoVisible, getEstadoVisibleLabel } from '../../../utils/eventoEstado';
@@ -33,6 +33,7 @@ let repartos: any[] = [];
 let socios: any[] = [];
 let eventoAnteriorId: string | null = null;
 let eventoSiguienteId: string | null = null;
+
 try {
   const [eventoCompleto, pagosEvento, gastosEvento, repartosEvento, sociosEvento, eventosLista] = await Promise.all([
     getEventoCompleto(Astro, id),
@@ -62,19 +63,10 @@ try {
 const presupuesto = Number(evento.presupuesto);
 const ingresoNeto = calcularIngresoNeto(presupuesto, evento.con_factura, Number(evento.retencion_irpf));
 const ivaImporte = calcularIVA(presupuesto, evento.con_factura, IVA_POR_DEFECTO);
-const baseImponible = calcularBaseImponible(
-  presupuesto,
-  evento.con_factura,
-  IVA_POR_DEFECTO,
-);
-const retencionImporte = calcularRetencionIRPF(
-  presupuesto,
-  evento.con_factura,
-  Number(evento.retencion_irpf),
-);
+const baseImponible = calcularBaseImponible(presupuesto, evento.con_factura, IVA_POR_DEFECTO);
+const retencionImporte = calcularRetencionIRPF(presupuesto, evento.con_factura, Number(evento.retencion_irpf));
 const totalPagado = await getTotalPagadoEvento(Astro, id);
 const totalGastos = await getTotalGastosEvento(Astro, id);
-const netoRepartible = calcularNetoRepartible(ingresoNeto, totalGastos);
 
 const repartosFormateados = repartos.map((r) => ({
   id: r.id,
@@ -87,7 +79,7 @@ const repartosFormateados = repartos.map((r) => ({
 }));
 
 const totalRepartido = repartosFormateados.reduce((sum, r) => sum + Number(r.cantidad), 0);
-const pendienteReparto = netoRepartible - totalRepartido;
+const pendienteReparto = ingresoNeto - totalGastos - totalRepartido;
 const repartoCompleto = pendienteReparto <= 0.01;
 
 const estadoVisible = getEstadoVisible(evento.estado_trabajo, evento.estado_financiero);
@@ -153,7 +145,7 @@ const estadoStamp = getEstadoStamp(estadoVisible);
             <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Trabajo</span>
             <select
               name="estado_trabajo"
-              class="min-w-[180px] border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+              class="min-w-45 border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
             >
               <option value="confirmado" selected={evento.estado_trabajo === 'confirmado'}>Confirmado</option>
               <option value="realizado" selected={evento.estado_trabajo === 'realizado'}>Realizado</option>
@@ -165,7 +157,7 @@ const estadoStamp = getEstadoStamp(estadoVisible);
             <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Financiero</span>
             <select
               name="estado_financiero"
-              class="min-w-[180px] border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+              class="min-w-45 border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
             >
               <option value="no_pagado" selected={evento.estado_financiero === 'no_pagado'}>No pagado</option>
               <option value="parcialmente_pagado" selected={evento.estado_financiero === 'parcialmente_pagado'}>Parcialmente pagado</option>
@@ -175,7 +167,7 @@ const estadoStamp = getEstadoStamp(estadoVisible);
 
           <button
             type="submit"
-            class="h-[42px] border border-accent bg-accent px-4 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-accent-hover"
+            class="h-10.5 border border-accent bg-accent px-4 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-accent-hover"
           >
             Guardar estados
           </button>
@@ -192,7 +184,7 @@ const estadoStamp = getEstadoStamp(estadoVisible);
         <form method="POST" action={`/api/eventos/${id}/facturacion`} class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:flex md:items-end">
           <input type="hidden" name="redirect_to" value={`/eventos/${id}/detalle`} />
 
-          <label class="flex h-[42px] items-center gap-2 border border-border bg-[#0a0a0a] px-3">
+          <label class="flex h-10.5 items-center gap-2 border border-border bg-[#0a0a0a] px-3">
             <input
               type="checkbox"
               name="con_factura"
@@ -212,60 +204,17 @@ const estadoStamp = getEstadoStamp(estadoVisible);
               max="100"
               step="0.01"
               value={Number(evento.retencion_irpf).toFixed(2)}
-              class="min-w-[180px] border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+              class="min-w-45 border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
             />
           </label>
 
           <button
             type="submit"
-            class="h-[42px] border border-accent bg-accent px-4 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-accent-hover"
+            class="h-10.5 border border-accent bg-accent px-4 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-accent-hover"
           >
             Guardar IRPF
           </button>
         </form>
-      </div>
-    </Card>
-
-    <Card>
-      <StampLabel rotate="left">Resumen financiero</StampLabel>
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-        <div class="p-4 bg-[#0a0a0a] border border-border">
-          <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Presupuesto</p>
-          <p class="text-2xl font-bold text-text-primary" style="font-family: 'JetBrains Mono', monospace;">{presupuesto.toFixed(2)} €</p>
-        </div>
-        <div class="p-4 bg-[#0a0a0a] border border-border">
-          <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Ingreso neto</p>
-          <p class="text-2xl font-bold text-accent" style="font-family: 'JetBrains Mono', monospace;">{ingresoNeto.toFixed(2)} €</p>
-          {evento.con_factura && (
-            <div class="mt-1 space-y-1">
-              <p class="text-xs text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">
-                IVA ({IVA_POR_DEFECTO}%): −{ivaImporte.toFixed(2)} €
-              </p>
-              <p class="text-xs text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">
-                Base imponible: {baseImponible.toFixed(2)} €
-              </p>
-              <p class="text-xs text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">
-                Retención IRPF ({Number(evento.retencion_irpf).toFixed(2)}% sobre base): −{retencionImporte.toFixed(2)} €
-              </p>
-            </div>
-          )}
-        </div>
-        <div class="p-4 bg-[#0a0a0a] border border-border">
-          <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Total pagado</p>
-          <p class="text-2xl font-bold text-text-primary" style="font-family: 'JetBrains Mono', monospace;">{totalPagado.toFixed(2)} €</p>
-          <p class="text-xs text-text-secondary mt-1" style="font-family: 'JetBrains Mono', monospace;">
-            Pendiente: {(presupuesto - totalPagado).toFixed(2)} €
-          </p>
-        </div>
-        <div class="p-4 bg-[#0a0a0a] border border-border">
-          <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Neto repartible</p>
-          <p class={`text-2xl font-bold ${netoRepartible >= 0 ? 'text-accent' : 'text-danger'}`} style="font-family: 'JetBrains Mono', monospace;">
-            {netoRepartible.toFixed(2)} €
-          </p>
-          <p class="text-xs text-text-secondary mt-1" style="font-family: 'JetBrains Mono', monospace;">
-            Gastos: −{totalGastos.toFixed(2)} €
-          </p>
-        </div>
       </div>
     </Card>
 
@@ -289,67 +238,24 @@ const estadoStamp = getEstadoStamp(estadoVisible);
       </Card>
     )}
 
-    <PagosEventoSection eventoId={id} pagos={pagos} client:load />
+    <CobroYRepartoAhora eventoId={id} profiles={socios} socios={socios} client:load />
 
-    <Card>
-      <div class="flex items-center justify-between mb-4">
-        <div>
-          <StampLabel rotate="left">Gastos del evento</StampLabel>
-          <p class="mt-2 text-sm text-text-secondary">
-            Total: <span class="font-semibold text-danger" style="font-family: 'JetBrains Mono', monospace;">−{totalGastos.toFixed(2)} €</span>
-          </p>
-        </div>
-        <a
-          href={`/gastos/nuevo?evento=${id}`}
-          class="px-3 py-1.5 bg-accent hover:bg-accent-hover text-[#0a0a0a] text-sm font-bold transition-colors"
-        >
-          + Añadir gasto
-        </a>
-      </div>
+    <PagosEventoSection eventoId={id} pagos={pagos} profiles={socios} client:load />
 
-      {gastos.length === 0 ? (
-        <p class="text-sm text-text-secondary text-center py-8">
-          No hay gastos asociados a este evento
-        </p>
-      ) : (
-        <div class="space-y-2">
-          {gastos.map((gasto) => {
-            const fuentes = (gasto.gasto_pagos ?? [])
-              .filter((f: any) => Number(f.cantidad) > 0)
-              .map((f: any) => {
-                const nombre = f.socio_id ? (f.profiles?.nombre ?? 'Socio') : 'Fondo';
-                return `${nombre} ${Number(f.cantidad).toFixed(2)}€`;
-              })
-              .join(' + ');
-
-            return (
-              <div class="flex items-center justify-between p-3 bg-[#0a0a0a] border border-border hover:border-border-strong transition-colors">
-                <div class="flex-1">
-                  <p class="font-medium text-text-primary">{gasto.concepto}</p>
-                  <div class="flex items-center gap-3 mt-1">
-                    <span class="text-xs text-text-secondary" style="font-family: 'JetBrains Mono', monospace;">{gasto.fecha}</span>
-                    <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">{gasto.categoria}</span>
-                    {fuentes && (
-                      <span class="text-[11px] uppercase tracking-[0.08em] text-text-primary">
-                        Pagado con: {fuentes}
-                        {gasto.reembolsado && ' (reembolsado)'}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <span class="font-semibold text-danger" style="font-family: 'JetBrains Mono', monospace;">−{Number(gasto.cantidad).toFixed(2)} €</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </Card>
-
-    <RepartoSection
+    <FinanzasEventoPanel
       eventoId={id}
+      presupuesto={presupuesto}
+      ingresoNeto={ingresoNeto}
+      ivaImporte={ivaImporte}
+      baseImponible={baseImponible}
+      retencionImporte={retencionImporte}
+      totalPagado={totalPagado}
+      totalGastosInicial={totalGastos}
+      conFactura={evento.con_factura}
+      retencionIrpf={Number(evento.retencion_irpf)}
+      gastosIniciales={gastos}
       socios={socios}
       repartosIniciales={repartosFormateados}
-      netoRepartible={netoRepartible}
       client:load
     />
   </div>

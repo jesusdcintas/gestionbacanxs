@@ -60,8 +60,10 @@ export default function GastoForm({
   const diferencia = cantidadGasto - totalFuentes;
   const cuadra = Math.abs(diferencia) < 0.01;
   const requiereEvento = formData.tipo_gasto === 'directo_evento';
+  const requiereFuentesExactas = formData.tipo_gasto !== 'directo_evento';
   const eventoValido = !requiereEvento || Boolean(formData.evento_id);
-  const puedeEnviar = cuadra && eventoValido;
+  const puedeEnviar = eventoValido && (!requiereFuentesExactas || (totalFuentes > 0 && cuadra));
+  const mostrarAvisoFuentes = requiereFuentesExactas && !cuadra;
 
   const setFuente = (key: string, value: string) => {
     setFuentes((prev) => ({ ...prev, [key]: value }));
@@ -162,7 +164,7 @@ export default function GastoForm({
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      tipo_gasto: e.target.value as 'directo_evento' | 'inversion_empresa',
+                      tipo_gasto: e.target.value as 'directo_evento' | 'inversion_empresa' | 'consumible',
                     })
                   }
                   required
@@ -170,6 +172,7 @@ export default function GastoForm({
                 >
                   <option value="directo_evento">Gasto del evento</option>
                   <option value="inversion_empresa">Inversión de empresa</option>
+                  <option value="consumible">Consumible</option>
                 </select>
               </div>
 
@@ -222,7 +225,7 @@ export default function GastoForm({
                     step="0.01"
                     min="0"
                     name={`fuente_${profile.id}`}
-                    value={fuentes[`socio_${profile.id}`] || '0'}
+                    value={fuentes[`socio_${profile.id}`] ?? ''}
                     onChange={(e) => setFuente(`socio_${profile.id}`, e.target.value)}
                   />
                 </div>
@@ -238,7 +241,7 @@ export default function GastoForm({
                   step="0.01"
                   min="0"
                   name="fuente_fondo"
-                  value={fuentes.fondo || '0'}
+                  value={fuentes.fondo ?? ''}
                   onChange={(e) => setFuente('fondo', e.target.value)}
                 />
               </div>
@@ -247,15 +250,27 @@ export default function GastoForm({
           </div>
 
           <div
-            className={`border p-3 ${cuadra ? 'border-accent/40 bg-[#111]' : 'border-danger/60 bg-danger-bg'}`}
+            className={`border p-3 ${mostrarAvisoFuentes ? 'border-danger/60 bg-danger-bg' : 'border-accent/40 bg-[#111]'}`}
             style={{ fontFamily: '"JetBrains Mono", monospace' }}
           >
             <p className="text-sm text-text-primary">
               Gasto: {cantidadGasto.toFixed(2)} € · Fuentes: {totalFuentes.toFixed(2)} € · Diferencia: {diferencia.toFixed(2)} €
             </p>
-            {!cuadra && (
+            {mostrarAvisoFuentes ? (
               <p className="mt-2 text-xs text-danger" style={{ fontFamily: 'Inter, sans-serif' }}>
                 La suma de fuentes debe coincidir exactamente con la cantidad del gasto.
+              </p>
+            ) : requiereFuentesExactas ? (
+              <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
+                En una inversión o consumible debes repartir el 100% entre socios y/o fondo.
+              </p>
+            ) : totalFuentes === 0 ? (
+              <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
+                Si salió directamente del cobro del evento, puedes dejar las fuentes a 0.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
+                Puedes registrar pagos parciales o completos desde socios/fondo.
               </p>
             )}
             {!eventoValido && (

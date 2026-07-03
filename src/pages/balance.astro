@@ -5,19 +5,17 @@ import { StampLabel } from '../components/ui/StampLabel.tsx';
 import MonthlyChart from '../components/balance/MonthlyChart.tsx';
 import CategoryChart from '../components/balance/CategoryChart.tsx';
 import BalanceSociosTable from '../components/balance/BalanceSociosTable.tsx';
-import GastosPendientesList from '../components/balance/GastosPendientesList.tsx';
+import BalanceLiquidacionPanel from '../components/balance/BalanceLiquidacionPanel.tsx';
 import {
   getBalanceData,
   getCategoryData,
   getBalanceSocios,
-  getAllGastosPendientes,
 } from '../services/balance';
 
-const [monthlyData, categoryData, balanceSocios, gastosPendientes] = await Promise.all([
+const [monthlyData, categoryData, balanceSocios] = await Promise.all([
   getBalanceData(Astro, 6),
   getCategoryData(Astro),
   getBalanceSocios(Astro),
-  getAllGastosPendientes(Astro),
 ]);
 
 const totalIngresos = monthlyData.reduce((sum, m) => sum + m.ingresos, 0);
@@ -40,7 +38,7 @@ const formatCurrency = (value: number) =>
         Balance financiero
       </h1>
       <p class="text-text-secondary mt-1">
-        Ingresos y gastos en el tiempo, balance entre socios y reembolsos pendientes.
+        Ingresos y gastos en el tiempo, pendiente de reembolso entre socios y repartos por eventos trabajados.
       </p>
     </div>
 
@@ -92,23 +90,10 @@ const formatCurrency = (value: number) =>
           <BalanceSociosTable balances={balanceSocios} />
         </CardContent>
       </Card>
-    </div>
-
-    <!-- Reembolsos pendientes -->
-    <div class="space-y-4">
-      <div class="flex items-center gap-3">
-        <StampLabel rotate="right" variant="danger">Reembolsos</StampLabel>
-        <h2
-          class="text-xl uppercase italic"
-          style="font-family: 'Archivo Black', sans-serif;"
-        >
-          Gastos pendientes de reembolso
-        </h2>
-      </div>
 
       <Card>
         <CardContent>
-          <GastosPendientesList gastos={gastosPendientes} client:load />
+          <BalanceLiquidacionPanel balances={balanceSocios} client:load />
         </CardContent>
       </Card>
     </div>

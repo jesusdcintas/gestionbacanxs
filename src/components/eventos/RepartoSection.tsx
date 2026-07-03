@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
@@ -32,6 +32,21 @@ export default function RepartoSection({
   repartosIniciales,
   netoRepartible,
 }: Props) {
+  const ordenarRepartos = (items: RepartoHistorico[]) =>
+    [...items].sort((a, b) => {
+      const fechaDiff = new Date(b.fecha).getTime() - new Date(a.fecha).getTime();
+      if (fechaDiff !== 0) return fechaDiff;
+
+      const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+      if (createdB !== createdA) return createdB - createdA;
+
+      return b.id.localeCompare(a.id);
+    });
+
+  const [repartosHistoricos, setRepartosHistoricos] = useState<RepartoHistorico[]>(() =>
+    ordenarRepartos(repartosIniciales),
+  );
   const [asignaciones, setAsignaciones] = useState<Record<string, string>>(() => {
     const inicial: Record<string, string> = {};
     socios.forEach((socio) => {
@@ -44,10 +59,18 @@ export default function RepartoSection({
   const [concepto, setConcepto] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [editingRepartoId, setEditingRepartoId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ fecha: '', concepto: '', cantidad: '' });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [savingDeleteId, setSavingDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRepartosHistoricos(ordenarRepartos(repartosIniciales));
+  }, [repartosIniciales]);
 
   const yaRepartido = useMemo(
-    () => repartosIniciales.reduce((sum, r) => sum + Number(r.cantidad), 0),
-    [repartosIniciales],
+    () => repartosHistoricos.reduce((sum, r) => sum + Number(r.cantidad), 0),
+    [repartosHistoricos],
   );
   const pendiente = netoRepartible - yaRepartido;
 
@@ -61,6 +84,101 @@ export default function RepartoSection({
 
   const setAsignacion = (key: string, value: string) => {
     setAsignaciones((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const startEdit = (item: RepartoHistorico) => {
+    setEditingRepartoId(item.id);
+    setEditForm({
+      fecha: item.fecha,
+      concepto: item.concepto || '',
+      cantidad: String(item.cantidad),
+    });
+    setErrorMessage(null);
+  };
+
+  const cancelEdit = () => {
+    setEditingRepartoId(null);
+    setEditForm({ fecha: '', concepto: '', cantidad: '' });
+    setSavingEdit(false);
+  };
+
+  const saveEdit = async () => {
+    if (!editingRepartoId) return;
+
+    const cantidad = parseFloat(editForm.cantidad.replace(',', '.'));
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      setErrorMessage('La cantidad debe ser mayor que 0.');
+      return;
+    }
+
+    setSavingEdit(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(`/api/repartos/${eventoId}/${editingRepartoId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fecha: editForm.fecha,
+          concepto: editForm.concepto.trim() || null,
+          cantidad,
+        }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || 'No se pudo editar el reparto');
+      }
+
+      setRepartosHistoricos((prev) =>
+        ordenarRepartos(
+          prev.map((item) =>
+            item.id === editingRepartoId
+              ? {
+                  ...item,
+                  fecha: editForm.fecha,
+                  concepto: editForm.concepto.trim() || null,
+                  cantidad,
+                }
+              : item,
+          ),
+        ),
+      );
+      cancelEdit();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Error al editar el reparto';
+      setErrorMessage(msg);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const deleteReparto = async (item: RepartoHistorico) => {
+    if (!window.confirm('¿Eliminar este reparto del histórico?')) return;
+
+    setSavingDeleteId(item.id);
+    setErrorMessage(null);
+
+    try {
+      const response = await fetch(`/api/repartos/${eventoId}/${item.id}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || 'No se pudo eliminar el reparto');
+      }
+
+      setRepartosHistoricos((prev) => prev.filter((current) => current.id !== item.id));
+      if (editingRepartoId === item.id) {
+        cancelEdit();
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Error al eliminar el reparto';
+      setErrorMessage(msg);
+    } finally {
+      setSavingDeleteId(null);
+    }
   };
 
   const limpiarTanda = () => {
@@ -172,6 +290,11 @@ export default function RepartoSection({
               {pendiente.toFixed(2)} €
             </span>
           </p>
+          {pendiente < 0 ? (
+            <p className="text-xs text-danger" style={{ fontFamily: 'Inter, sans-serif' }}>
+              El total repartido supera el neto disponible.
+            </p>
+          ) : null}
         </div>
 
         <div className="border border-border p-4 bg-[#0a0a0a] space-y-4">
@@ -200,7 +323,7 @@ export default function RepartoSection({
                     type="number"
                     min="0"
                     step="0.01"
-                    value={asignaciones[socio.id] || '0'}
+                    value={asignaciones[socio.id] ?? ''}
                     onChange={(e) => setAsignacion(socio.id, e.target.value)}
                   />
                 </div>
@@ -218,7 +341,7 @@ export default function RepartoSection({
                   type="number"
                   min="0"
                   step="0.01"
-                  value={asignaciones.fondo || '0'}
+                  value={asignaciones.fondo ?? ''}
                   onChange={(e) => setAsignacion('fondo', e.target.value)}
                 />
               </div>
@@ -257,25 +380,83 @@ export default function RepartoSection({
 
         <div className="space-y-3">
           <StampLabel rotate="left">Histórico de repartos</StampLabel>
-          {repartosIniciales.length === 0 ? (
+          {repartosHistoricos.length === 0 ? (
             <p className="text-sm text-text-secondary">Aún no hay repartos registrados en este evento.</p>
           ) : (
             <div className="space-y-2">
-              {repartosIniciales.map((item) => (
-                <div key={item.id} className="border border-border p-3 bg-[#0a0a0a]">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm text-text-primary font-medium">{item.nombre}</p>
-                      <p className="text-xs text-text-secondary" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
-                        {item.fecha}{item.concepto ? ` · ${item.concepto}` : ''}
-                      </p>
-                    </div>
-                    <p className="text-sm text-accent font-semibold" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
-                      {Number(item.cantidad).toFixed(2)} €
-                    </p>
+              {repartosHistoricos.map((item) => {
+                const estaEditando = editingRepartoId === item.id;
+
+                return (
+                  <div key={item.id} className="border border-border p-3 bg-[#0a0a0a] space-y-3">
+                    {!estaEditando ? (
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm text-text-primary font-medium">{item.nombre}</p>
+                          <p className="text-xs text-text-secondary" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                            {item.fecha}{item.concepto ? ` · ${item.concepto}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <p className="text-sm text-accent font-semibold" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
+                            {Number(item.cantidad).toFixed(2)} €
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => startEdit(item)}
+                            className="text-[11px] uppercase tracking-[0.08em] text-text-primary hover:text-accent transition-colors"
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteReparto(item)}
+                            disabled={savingDeleteId === item.id}
+                            className="text-[11px] uppercase tracking-[0.08em] text-danger hover:text-text-primary transition-colors disabled:opacity-50"
+                          >
+                            {savingDeleteId === item.id ? 'Eliminando...' : 'Eliminar'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          <Input
+                            label="Fecha"
+                            type="date"
+                            value={editForm.fecha}
+                            onChange={(e) => setEditForm((prev) => ({ ...prev, fecha: e.target.value }))}
+                          />
+                          <Input
+                            label="Concepto"
+                            type="text"
+                            value={editForm.concepto}
+                            onChange={(e) => setEditForm((prev) => ({ ...prev, concepto: e.target.value }))}
+                            placeholder="Concepto"
+                          />
+                          <Input
+                            label="Cantidad"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={editForm.cantidad}
+                            onChange={(e) => setEditForm((prev) => ({ ...prev, cantidad: e.target.value }))}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button type="button" variant="secondary" size="sm" onClick={cancelEdit} disabled={savingEdit}>
+                            Cancelar
+                          </Button>
+                          <Button type="button" variant="primary" size="sm" onClick={saveEdit} isLoading={savingEdit}>
+                            Guardar cambios
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

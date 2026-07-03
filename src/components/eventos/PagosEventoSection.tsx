@@ -1,23 +1,31 @@
 import { useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
+import { Select } from '../ui/Select';
 import { Card } from '../ui/Card';
 import { StampLabel } from '../ui/StampLabel';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import type { Database } from '../../types/database';
 
 interface Pago {
   id: string;
   fecha: string;
   cantidad: number;
   concepto: string | null;
+  recibido_por: string | null;
+  metodo_pago: 'efectivo' | 'banco';
+  recibido_por_profile?: { nombre: string } | null;
 }
+
+type Profile = Database['public']['Tables']['profiles']['Row'];
 
 interface Props {
   eventoId: string;
   pagos: Pago[];
+  profiles: Profile[];
 }
 
-export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: Props) {
+export default function PagosEventoSection({ eventoId, pagos: pagosIniciales, profiles }: Props) {
   const [pagos, setPagos] = useState(pagosIniciales);
   const [showForm, setShowForm] = useState(false);
   const [editingPago, setEditingPago] = useState<Pago | null>(null);
@@ -28,6 +36,8 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
     fecha: new Date().toISOString().split('T')[0],
     cantidad: '',
     concepto: '',
+    recibido_por: '',
+    metodo_pago: 'banco',
   });
 
   const totalPagado = pagos.reduce((sum, p) => sum + Number(p.cantidad), 0);
@@ -37,6 +47,8 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
       fecha: new Date().toISOString().split('T')[0],
       cantidad: '',
       concepto: '',
+      recibido_por: '',
+      metodo_pago: 'banco',
     });
     setEditingPago(null);
     setShowForm(false);
@@ -47,6 +59,8 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
       fecha: pago.fecha,
       cantidad: pago.cantidad.toString(),
       concepto: pago.concepto || '',
+      recibido_por: pago.recibido_por || '',
+      metodo_pago: pago.metodo_pago || 'banco',
     });
     setEditingPago(pago);
     setShowForm(true);
@@ -82,6 +96,8 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
       fecha: formData.fecha,
       cantidad: parseFloat(formData.cantidad),
       concepto: formData.concepto || null,
+      recibido_por: formData.recibido_por || null,
+      metodo_pago: formData.metodo_pago,
     };
 
     try {
@@ -146,7 +162,7 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
 
         {showForm && (
           <form onSubmit={handleSubmit} className="border border-border p-4 space-y-4 bg-[#0a0a0a]">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               <Input
                 label="Fecha"
                 type="date"
@@ -171,6 +187,27 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
                 onChange={(e) => setFormData({ ...formData, concepto: e.target.value })}
                 placeholder="Ej: Primer pago"
               />
+              <Select
+                label="¿Quién cobró?"
+                value={formData.recibido_por}
+                onChange={(e) => setFormData({ ...formData, recibido_por: e.target.value })}
+                required
+              >
+                <option value="">Selecciona quién cobró</option>
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.nombre}
+                  </option>
+                ))}
+              </Select>
+              <Select
+                label="Forma de cobro"
+                value={formData.metodo_pago}
+                onChange={(e) => setFormData({ ...formData, metodo_pago: e.target.value })}
+              >
+                <option value="banco">Banco</option>
+                <option value="efectivo">Efectivo</option>
+              </Select>
             </div>
             <div className="flex gap-2">
               <Button type="submit" variant="primary" size="sm">
@@ -199,7 +236,7 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
                 className="flex items-center justify-between p-3 bg-[#0a0a0a] border border-border hover:border-border-strong transition-colors"
               >
                 <div className="flex-1">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span
                       className="text-sm text-text-secondary"
                       style={{ fontFamily: '"JetBrains Mono", monospace' }}
@@ -212,6 +249,12 @@ export default function PagosEventoSection({ eventoId, pagos: pagosIniciales }: 
                     >
                       {Number(pago.cantidad).toFixed(2)} €
                     </span>
+                    <StampLabel rotate="none" variant={pago.recibido_por ? 'outline' : 'danger'}>
+                      {pago.recibido_por_profile?.nombre || 'Sin asignar'}
+                    </StampLabel>
+                    <StampLabel rotate="none" variant={pago.metodo_pago === 'banco' ? 'accent' : 'outline'}>
+                      {pago.metodo_pago === 'banco' ? 'Banco' : 'Efectivo'}
+                    </StampLabel>
                   </div>
                   {pago.concepto && (
                     <p className="text-sm text-text-secondary mt-1">{pago.concepto}</p>

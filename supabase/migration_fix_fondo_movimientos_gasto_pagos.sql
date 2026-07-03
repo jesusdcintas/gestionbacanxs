@@ -1,54 +1,3 @@
--- ============================================================================
--- MIGRACION: TIPO DE GASTO (DIRECTO EVENTO VS INVERSION EMPRESA)
--- ============================================================================
--- Objetivo:
--- 1) Añadir tipo_gasto en gastos.
--- 2) Mantener comportamiento actual en gastos con evento_id (directo_evento).
--- 3) Clasificar gastos sin evento como inversion_empresa para evitar afectar repartos.
--- 4) Actualizar RPC guardar_gasto_con_pagos con p_tipo_gasto y validaciones.
---
--- Script idempotente: se puede ejecutar varias veces.
--- ============================================================================
-
-begin;
-
--- --------------------------------------------------------------------------
--- 1) Nuevo campo tipo_gasto
--- --------------------------------------------------------------------------
-alter table public.gastos
-  add column if not exists tipo_gasto text not null default 'directo_evento';
-
--- Asegura dominio de valores válidos (idempotente)
-do $$
-begin
-  if not exists (
-    select 1
-    from pg_constraint
-    where conname = 'gastos_tipo_gasto_check'
-      and conrelid = 'public.gastos'::regclass
-  ) then
-    alter table public.gastos
-      add constraint gastos_tipo_gasto_check
-      check (tipo_gasto in ('directo_evento', 'inversion_empresa', 'consumible'));
-  end if;
-end $$;
-
--- Backfill seguro para datos existentes
--- - Si tiene evento_id => directo_evento
--- - Si no tiene evento_id => inversion_empresa
-update public.gastos
-set tipo_gasto = case
-  when evento_id is not null then 'directo_evento'
-  else 'inversion_empresa'
-end
-where tipo_gasto not in ('directo_evento', 'inversion_empresa')
-   or tipo_gasto is null
-   or (tipo_gasto = 'directo_evento' and evento_id is null)
-   or (tipo_gasto = 'inversion_empresa' and evento_id is not null and false);
-
--- --------------------------------------------------------------------------
--- 2) RPC guardar_gasto_con_pagos con tipo_gasto
--- --------------------------------------------------------------------------
 create or replace function public.guardar_gasto_con_pagos(
   p_gasto_id uuid,
   p_concepto text,
@@ -67,7 +16,8 @@ as $$
 declare
   v_gasto_id uuid;
   v_suma_fuentes numeric(10,2);
-    v_tipo_gasto text;
+  v_tipo_gasto text;
+  v_total_fondo numeric(10,2);
 begin
   if p_cantidad is null or p_cantidad <= 0 then
     raise exception 'La cantidad del gasto debe ser mayor a 0';
@@ -140,6 +90,13 @@ begin
     delete from public.gasto_pagos where gasto_id = v_gasto_id;
   end if;
 
+  -- Recalcular salida de fondo de este gasto: borrar y recrear.
+  delete from public.fondo_movimientos
+  where gasto_id = v_gasto_id
+    and cantidad < 0
+    and coalesce(concepto, '') not like 'Reembolso a socios:%'
+    and coalesce(concepto, '') not like 'Reembolso a socio:%';
+
   insert into public.gasto_pagos (gasto_id, socio_id, cantidad)
   select
     v_gasto_id,
@@ -148,8 +105,39 @@ begin
   from jsonb_array_elements(coalesce(p_fuentes, '[]'::jsonb))
   where coalesce((value->>'cantidad')::numeric, 0) > 0;
 
+  select coalesce(sum(gp.cantidad), 0)
+  into v_total_fondo
+  from public.gasto_pagos gp
+  where gp.gasto_id = v_gasto_id
+    and gp.socio_id is null;
+
+  if v_total_fondo > 0 then
+    insert into public.fondo_movimientos (fecha, concepto, cantidad, evento_id, gasto_id)
+    values (
+      coalesce(p_fecha, current_date),
+      p_concepto,
+      -v_total_fondo,
+      p_evento_id,
+      v_gasto_id
+    );
+  end if;
+
   return v_gasto_id;
 end;
 $$;
 
-commit;
+insert into public.fondo_movimientos (fecha, concepto, cantidad, evento_id, gasto_id)
+select
+  '2026-05-12'::date,
+  'Thomann sub + conectores xlr y jack',
+  -400.00,
+  null,
+  '312a99fe-4dce-4900-a1d1-e72780ec775b'::uuid
+where not exists (
+  select 1
+  from public.fondo_movimientos fm
+  where fm.gasto_id = '312a99fe-4dce-4900-a1d1-e72780ec775b'::uuid
+    and fm.fecha = '2026-05-12'::date
+    and fm.cantidad = -400.00
+    and fm.concepto = 'Thomann sub + conectores xlr y jack'
+);

@@ -4,7 +4,7 @@ import { cn } from '../../utils/cn';
 export interface StampLabelProps {
   children: ReactNode;
   rotate?: 'left' | 'right' | 'none';
-  variant?: 'outline' | 'accent' | 'danger';
+  variant?: 'outline' | 'accent' | 'danger' | 'consumible';
   className?: string;
   as?: 'span' | 'div';
 }
@@ -30,6 +30,8 @@ export function StampLabel({
   const variantClass =
     variant === 'accent'
       ? 'bg-accent text-[#0a0a0a] border border-accent'
+      : variant === 'consumible'
+        ? 'bg-consumible text-consumible-ink border border-consumible'
       : variant === 'danger'
         ? 'bg-transparent text-danger border border-danger'
         : 'bg-transparent text-text-primary border-[1.5px] border-[#f5f5f0]';

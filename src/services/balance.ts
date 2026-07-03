@@ -1,6 +1,5 @@
 import type { APIContext } from 'astro';
 import { getSupabaseServerClient } from '../lib/supabase';
-import { calcularBalanceSocio } from '../utils/finanzas';
 
 /**
  * Balance de un socio individual
@@ -8,15 +7,16 @@ import { calcularBalanceSocio } from '../utils/finanzas';
 export interface BalanceSocio {
   socio_id: string;
   nombre: string;
-  totalCobrado: number;      // Total que ha cobrado de repartos
-  totalAportado: number;     // Total gastado de su bolsillo (no reembolsado)
-  totalReembolsado: number;  // Total que ya se le reembolsó
-  balance: number;           // totalCobrado - totalAportado (positivo = debe recibir, negativo = debe aportar)
+  totalCobrado: number;      // Total cobrado en repartos de eventos
+  totalAportado: number;     // Total gastado de su bolsillo (solo no reembolsado)
+  totalReembolsado: number;  // Total histórico ya reembolsado
+  eventosTrabajados: number; // Total de eventos trabajados
 }
 
 /**
- * Obtiene el balance entre socios
- * Calcula lo que cada socio ha cobrado vs lo que ha aportado en gastos
+ * Obtiene métricas por socio para:
+ * 1) Pendiente de reembolso (totalAportado no reembolsado)
+ * 2) Repartos informativos (totalCobrado y eventosTrabajados)
  */
 export async function getBalanceSocios(context: APIContext): Promise<BalanceSocio[]> {
   const supabase = getSupabaseServerClient(context);
@@ -32,7 +32,7 @@ export async function getBalanceSocios(context: APIContext): Promise<BalanceSoci
     throw new Error('No se pudieron cargar los socios');
   }
 
-  // Para cada socio, calcular su balance
+  // Para cada socio, calcular métricas financieras separadas
   const balances: BalanceSocio[] = [];
 
   for (const socio of socios) {
@@ -48,6 +48,19 @@ export async function getBalanceSocios(context: APIContext): Promise<BalanceSoci
     }
 
     const totalCobrado = repartos.reduce((sum, r) => sum + Number(r.cantidad), 0);
+
+    // Eventos trabajados (conteo por evento)
+    const { data: trabajos, error: trabajosError } = await supabase
+      .from('evento_trabajadores')
+      .select('evento_id')
+      .eq('socio_id', socio.id);
+
+    if (trabajosError) {
+      console.error(`Error fetching eventos trabajados for socio ${socio.id}:`, trabajosError);
+      continue;
+    }
+
+    const eventosTrabajados = new Set((trabajos ?? []).map((t) => t.evento_id)).size;
 
     // Total aportado en gastos de su bolsillo usando gasto_pagos
     const { data: pagosSocio, error: pagosError } = await supabase
@@ -68,21 +81,17 @@ export async function getBalanceSocios(context: APIContext): Promise<BalanceSoci
       .filter((p: any) => !Boolean(p.gastos?.reembolsado))
       .reduce((sum, p: any) => sum + Number(p.cantidad), 0);
 
-    // Calcular balance
-    const balance = calcularBalanceSocio(totalCobrado, totalAportado);
-
     balances.push({
       socio_id: socio.id,
       nombre: socio.nombre,
       totalCobrado,
       totalAportado,
       totalReembolsado,
-      balance,
+      eventosTrabajados,
     });
   }
 
-  // Ordenar por balance descendente (los que más deben recibir primero)
-  return balances.sort((a, b) => b.balance - a.balance);
+  return balances.sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 
 /**
@@ -94,6 +103,51 @@ export async function getBalanceSocio(
 ): Promise<BalanceSocio | null> {
   const balances = await getBalanceSocios(context);
   return balances.find(b => b.socio_id === socioId) || null;
+}
+
+/**
+ * Saldo por persona basado en cobros recibidos y gastos aportados.
+ * saldo = pagos_evento.recibido_por - gasto_pagos.socio_id (no reembolsado)
+ */
+export interface SaldoCobrosPersona {
+  socio_id: string;
+  totalCobrado: number;
+  totalAportado: number;
+  saldo: number;
+}
+
+export async function getSaldoCobrosPersona(
+  context: APIContext,
+  socioId: string,
+): Promise<SaldoCobrosPersona> {
+  const supabase = getSupabaseServerClient(context);
+
+  const [ingresosRes, gastosRes] = await Promise.all([
+    supabase
+      .from('pagos_evento')
+      .select('cantidad')
+      .eq('recibido_por', socioId),
+    supabase
+      .from('gasto_pagos')
+      .select('cantidad, gastos!inner(reembolsado)')
+      .eq('socio_id', socioId)
+      .eq('gastos.reembolsado', false),
+  ]);
+
+  if (ingresosRes.error || gastosRes.error) {
+    console.error('Error fetching saldo por persona:', ingresosRes.error ?? gastosRes.error);
+    throw new Error('No se pudo calcular el saldo por persona');
+  }
+
+  const totalCobrado = (ingresosRes.data ?? []).reduce((sum, ingreso) => sum + Number(ingreso.cantidad), 0);
+  const totalAportado = (gastosRes.data ?? []).reduce((sum, gasto: any) => sum + Number(gasto.cantidad), 0);
+
+  return {
+    socio_id: socioId,
+    totalCobrado,
+    totalAportado,
+    saldo: totalCobrado - totalAportado,
+  };
 }
 
 /**
@@ -120,54 +174,6 @@ export async function getGastosPendientesReembolso(
   return (data ?? []).map((row: any) => ({
     ...row.gastos,
     cantidad_aportada: Number(row.cantidad),
-  }));
-}
-
-/**
- * Gasto pendiente de reembolso con nombre del socio y evento (vista global)
- */
-export interface GastoPendienteReembolso {
-  id: string;
-  fecha: string;
-  concepto: string;
-  categoria: string;
-  cantidad: number;
-  pagado_por: string;
-  evento_id: string | null;
-  socio_nombre: string;
-  evento_nombre: string | null;
-}
-
-/**
- * Obtiene todos los gastos pendientes de reembolso (todos los socios)
- */
-export async function getAllGastosPendientes(
-  context: APIContext,
-): Promise<GastoPendienteReembolso[]> {
-  const supabase = getSupabaseServerClient(context);
-
-  const { data, error } = await supabase
-    .from('gasto_pagos')
-    .select('cantidad, socio_id, gastos!inner(id, fecha, concepto, categoria, evento_id, reembolsado, eventos(nombre)), profiles(nombre)')
-    .not('socio_id', 'is', null)
-    .eq('gastos.reembolsado', false)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching gastos pendientes:', error);
-    throw new Error('No se pudieron cargar los gastos pendientes de reembolso');
-  }
-
-  return (data ?? []).map((g: any) => ({
-    id: g.gastos.id,
-    fecha: g.gastos.fecha,
-    concepto: g.gastos.concepto,
-    categoria: g.gastos.categoria,
-    cantidad: Number(g.cantidad),
-    pagado_por: g.socio_id,
-    evento_id: g.gastos.evento_id,
-    socio_nombre: g.profiles?.nombre ?? '—',
-    evento_nombre: g.gastos.eventos?.nombre ?? null,
   }));
 }
 

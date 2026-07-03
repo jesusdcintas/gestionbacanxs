@@ -5,8 +5,10 @@ import { Button } from '../../components/ui/Button.tsx';
 import { Card } from '../../components/ui/Card.tsx';
 import { Plus } from 'lucide-react';
 import { getIngresos } from '../../services/ingresos';
+import { getProfiles } from '../../services/profiles';
 
 const ingresos = await getIngresos(Astro);
+const profiles = await getProfiles(Astro);
 ---
 
 <AppLayout title="Ingresos">
@@ -25,7 +27,7 @@ const ingresos = await getIngresos(Astro);
     </div>
 
     <Card>
-      <IngresosTable ingresos={ingresos} editBasePath="/ingresos" client:load />
+      <IngresosTable ingresos={ingresos} profiles={profiles} editBasePath="/ingresos" client:load />
     </Card>
   </div>
 </AppLayout>

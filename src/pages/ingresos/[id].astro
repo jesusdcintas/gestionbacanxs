@@ -3,6 +3,7 @@ import AppLayout from '../../layouts/AppLayout.astro';
 import IngresoForm from '../../components/ingresos/IngresoForm.tsx';
 import { getIngreso, updateIngreso } from '../../services/ingresos';
 import { getEventos } from '../../services/eventos';
+import { getProfiles } from '../../services/profiles';
 
 const { id } = Astro.params;
 
@@ -19,12 +20,14 @@ try {
 }
 
 const eventos = await getEventos(Astro);
+const profiles = await getProfiles(Astro);
 
 // Handle form submission
 if (Astro.request.method === 'POST') {
   try {
     const formData = await Astro.request.formData();
     const eventoId = formData.get('evento_id')?.toString() || '';
+    const metodoPago = (formData.get('metodo_pago')?.toString() as 'efectivo' | 'banco' | null) || 'banco';
 
     if (!eventoId) {
       throw new Error('Debes seleccionar un evento para registrar el ingreso');
@@ -35,7 +38,13 @@ if (Astro.request.method === 'POST') {
       cantidad: parseFloat(formData.get('cantidad')?.toString() || '0'),
       fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
       evento_id: eventoId,
+      recibido_por: formData.get('recibido_por')?.toString() || null,
+      metodo_pago: metodoPago,
     };
+
+    if (!ingresoData.recibido_por) {
+      throw new Error('Debes seleccionar quién cobró el ingreso');
+    }
 
     console.log('Datos del ingreso a actualizar:', JSON.stringify(ingresoData, null, 2));
     
@@ -59,6 +68,6 @@ if (Astro.request.method === 'POST') {
       <p class="text-text-secondary mt-1">Modifica los detalles del ingreso</p>
     </div>
 
-    <IngresoForm ingreso={ingreso} eventos={eventos} client:load />
+    <IngresoForm ingreso={ingreso} eventos={eventos} profiles={profiles} client:load />
   </div>
 </AppLayout>

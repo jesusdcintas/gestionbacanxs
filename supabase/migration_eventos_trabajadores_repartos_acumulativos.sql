@@ -172,6 +172,46 @@ begin
 end;
 $$;
 
+create or replace function public.editar_reparto(
+  p_reparto_id uuid,
+  p_fecha date,
+  p_concepto text,
+  p_cantidad numeric
+)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  update public.repartos_evento
+  set fecha = p_fecha,
+      concepto = p_concepto,
+      cantidad = p_cantidad
+  where id = p_reparto_id;
+
+  if not found then
+    raise exception 'Reparto no encontrado';
+  end if;
+end;
+$$;
+
+create or replace function public.eliminar_reparto(
+  p_reparto_id uuid
+)
+returns void
+language plpgsql
+security definer
+as $$
+begin
+  delete from public.repartos_evento
+  where id = p_reparto_id;
+
+  if not found then
+    raise exception 'Reparto no encontrado';
+  end if;
+end;
+$$;
+
 -- ============================================================
 -- 5) QUERY REUTILIZABLE DE CARGA DE TRABAJO POR SOCIO
 -- ============================================================

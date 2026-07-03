@@ -15,6 +15,12 @@ export interface RegistrarRepartoInput {
   repartos: RepartoInput[];
 }
 
+export interface EditarRepartoInput {
+  fecha: string;
+  concepto: string | null;
+  cantidad: number;
+}
+
 /**
  * Obtiene los repartos de un evento específico
  */
@@ -69,6 +75,45 @@ export async function registrarRepartoEvento(
   }
 
   console.log('Tanda de reparto registrada exitosamente');
+}
+
+/**
+ * Edita una fila concreta del histórico de repartos.
+ */
+export async function editarRepartoEvento(
+  context: APIContext,
+  repartoId: string,
+  input: EditarRepartoInput,
+) {
+  const supabase = getSupabaseServerClient(context);
+
+  const { error } = await supabase.rpc('editar_reparto', {
+    p_reparto_id: repartoId,
+    p_fecha: input.fecha,
+    p_concepto: input.concepto,
+    p_cantidad: input.cantidad,
+  });
+
+  if (error) {
+    console.error('Error editando reparto:', error);
+    throw new Error(`No se pudo editar el reparto: ${error.message}`);
+  }
+}
+
+/**
+ * Elimina una fila concreta del histórico de repartos.
+ */
+export async function eliminarRepartoEvento(context: APIContext, repartoId: string) {
+  const supabase = getSupabaseServerClient(context);
+
+  const { error } = await supabase.rpc('eliminar_reparto', {
+    p_reparto_id: repartoId,
+  });
+
+  if (error) {
+    console.error('Error eliminando reparto:', error);
+    throw new Error(`No se pudo eliminar el reparto: ${error.message}`);
+  }
 }
 
 /**

@@ -6,6 +6,21 @@ type PagoEvento = Database['public']['Tables']['pagos_evento']['Row'];
 type PagoEventoInsert = Database['public']['Tables']['pagos_evento']['Insert'];
 type PagoEventoUpdate = Database['public']['Tables']['pagos_evento']['Update'];
 
+export type PagoEventoConRecibo = PagoEvento & {
+  eventos?: { nombre: string } | null;
+  recibido_por_profile?: { nombre: string } | null;
+};
+
+export interface CobrarYRepartirInput {
+  evento_id: string;
+  fecha: string;
+  cantidad: number;
+  recibido_por: string;
+  metodo_pago: 'efectivo' | 'banco';
+  concepto_pago: string | null;
+  repartos: { socio_id: string | null; cantidad: number; concepto?: string | null }[];
+}
+
 /**
  * Obtiene todos los pagos de un evento específico
  */
@@ -14,7 +29,7 @@ export async function getPagosByEvento(context: APIContext, eventoId: string) {
   
   const { data, error } = await supabase
     .from('pagos_evento')
-    .select('*')
+    .select('*, recibido_por_profile:profiles!pagos_evento_recibido_por_fkey(nombre)')
     .eq('evento_id', eventoId)
     .order('fecha', { ascending: false });
 
@@ -23,7 +38,7 @@ export async function getPagosByEvento(context: APIContext, eventoId: string) {
     throw new Error('No se pudieron cargar los pagos del evento');
   }
 
-  return data as PagoEvento[];
+  return data as PagoEventoConRecibo[];
 }
 
 /**
@@ -34,7 +49,7 @@ export async function getPago(context: APIContext, id: string) {
   
   const { data, error } = await supabase
     .from('pagos_evento')
-    .select('*, eventos(nombre)')
+    .select('*, eventos(nombre), recibido_por_profile:profiles!pagos_evento_recibido_por_fkey(nombre)')
     .eq('id', id)
     .single();
 
@@ -43,7 +58,7 @@ export async function getPago(context: APIContext, id: string) {
     throw new Error('No se pudo cargar el pago');
   }
 
-  return data as PagoEvento & { eventos?: { nombre: string } | null };
+  return data as PagoEventoConRecibo;
 }
 
 /**
@@ -65,7 +80,7 @@ export async function createPago(context: APIContext, pago: PagoEventoInsert) {
   const { data, error } = await supabase
     .from('pagos_evento')
     .insert(pagoData)
-    .select()
+    .select('*, eventos(nombre), recibido_por_profile:profiles!pagos_evento_recibido_por_fkey(nombre)')
     .single();
 
   if (error) {
@@ -74,7 +89,7 @@ export async function createPago(context: APIContext, pago: PagoEventoInsert) {
   }
 
   console.log('Pago creado exitosamente:', data);
-  return data as PagoEvento;
+  return data as PagoEventoConRecibo;
 }
 
 /**
@@ -89,7 +104,7 @@ export async function updatePago(context: APIContext, id: string, pago: PagoEven
     .from('pagos_evento')
     .update(pago)
     .eq('id', id)
-    .select()
+    .select('*, eventos(nombre), recibido_por_profile:profiles!pagos_evento_recibido_por_fkey(nombre)')
     .single();
 
   if (error) {
@@ -98,7 +113,7 @@ export async function updatePago(context: APIContext, id: string, pago: PagoEven
   }
 
   console.log('Pago actualizado exitosamente:', data);
-  return data as PagoEvento;
+  return data as PagoEventoConRecibo;
 }
 
 /**
@@ -115,6 +130,25 @@ export async function deletePago(context: APIContext, id: string) {
   if (error) {
     console.error('Error deleting pago:', error);
     throw new Error('No se pudo eliminar el pago');
+  }
+}
+
+export async function cobrarYRepartir(context: APIContext, input: CobrarYRepartirInput) {
+  const supabase = getSupabaseServerClient(context);
+
+  const { error } = await supabase.rpc('cobrar_y_repartir', {
+    p_evento_id: input.evento_id,
+    p_fecha: input.fecha,
+    p_cantidad: input.cantidad,
+    p_recibido_por: input.recibido_por,
+    p_metodo_pago: input.metodo_pago,
+    p_concepto_pago: input.concepto_pago,
+    p_repartos: input.repartos as any,
+  });
+
+  if (error) {
+    console.error('Error ejecutando cobrar_y_repartir:', error);
+    throw new Error(`No se pudo registrar el cobro y reparto: ${error.message}`);
   }
 }
 

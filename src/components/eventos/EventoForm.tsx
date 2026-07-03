@@ -403,7 +403,7 @@ export default function EventoForm({
                       name={`reparto_${socio.id}`}
                       step="0.01"
                       min="0"
-                      value={repartos[socio.id] || '0'}
+                      value={repartos[socio.id] ?? ''}
                       onChange={(e) => setReparto(socio.id, e.target.value)}
                       placeholder="0.00"
                     />
@@ -423,7 +423,7 @@ export default function EventoForm({
                     name="reparto_fondo"
                     step="0.01"
                     min="0"
-                    value={repartos.fondo || '0'}
+                    value={repartos.fondo ?? ''}
                     onChange={(e) => setReparto('fondo', e.target.value)}
                     placeholder="0.00"
                   />
