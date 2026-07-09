@@ -269,8 +269,12 @@ create table if not exists public.fondo_movimientos (
   cantidad numeric(10,2) not null,  -- positivo = entrada, negativo = salida
   evento_id uuid references public.eventos(id) on delete set null,
   gasto_id uuid references public.gastos(id) on delete set null,
+  reparto_id uuid references public.repartos_evento(id) on delete cascade,
   created_at timestamptz default now()
 );
+
+alter table public.fondo_movimientos
+  add column if not exists reparto_id uuid references public.repartos_evento(id) on delete cascade;
 
 -- ============================================================================
 -- ÍNDICES
@@ -312,6 +316,7 @@ create index if not exists idx_evento_trabajadores_socio_id on public.evento_tra
 create index if not exists idx_fondo_movimientos_fecha on public.fondo_movimientos (fecha desc);
 create index if not exists idx_fondo_movimientos_evento_id on public.fondo_movimientos (evento_id);
 create index if not exists idx_fondo_movimientos_gasto_id on public.fondo_movimientos (gasto_id);
+create index if not exists idx_fondo_movimientos_reparto_id on public.fondo_movimientos (reparto_id);
 
 -- ============================================================================
 -- TRIGGERS (updated_at)
@@ -430,7 +435,6 @@ declare
   v_ya_repartido numeric;
   v_tanda numeric;
   v_restante numeric;
-  v_aporte_fondo numeric;
 begin
   if p_repartos is null or jsonb_typeof(p_repartos) <> 'array' then
     raise exception 'p_repartos debe ser un array jsonb';
@@ -478,34 +482,31 @@ begin
     raise exception 'La tanda (%.2f) supera lo pendiente (%.2f)', v_tanda, v_restante;
   end if;
 
-  insert into public.repartos_evento (evento_id, socio_id, cantidad, fecha, concepto)
-  select
-    p_evento_id,
-    nullif(elem->>'socio_id', '')::uuid,
-    (elem->>'cantidad')::numeric,
-    coalesce(p_fecha, current_date),
-    nullif(trim(coalesce(p_concepto, '')), '')
-  from jsonb_array_elements(p_repartos) elem
-  where coalesce((elem->>'cantidad')::numeric, 0) > 0;
-
-  select coalesce(sum((elem->>'cantidad')::numeric), 0)
-  into v_aporte_fondo
-  from jsonb_array_elements(p_repartos) elem
-  where (elem->>'socio_id') is null
-    and coalesce((elem->>'cantidad')::numeric, 0) > 0;
-
-  if v_aporte_fondo > 0 then
-    insert into public.fondo_movimientos (fecha, concepto, cantidad, evento_id)
-    values (
+  with inserted_repartos as (
+    insert into public.repartos_evento (evento_id, socio_id, cantidad, fecha, concepto)
+    select
+      p_evento_id,
+      nullif(elem->>'socio_id', '')::uuid,
+      (elem->>'cantidad')::numeric,
       coalesce(p_fecha, current_date),
-      coalesce(
-        nullif(trim(coalesce(p_concepto, '')), ''),
-        'Reparto a fondo del evento "' || coalesce(v_evento.nombre, p_evento_id::text) || '"'
-      ),
-      v_aporte_fondo,
-      p_evento_id
-    );
-  end if;
+      nullif(trim(coalesce(p_concepto, '')), '')
+    from jsonb_array_elements(p_repartos) elem
+    where coalesce((elem->>'cantidad')::numeric, 0) > 0
+    returning id, evento_id, socio_id, cantidad, fecha, concepto
+  )
+  insert into public.fondo_movimientos (fecha, concepto, cantidad, evento_id, reparto_id)
+  select
+    ir.fecha,
+    coalesce(
+      nullif(trim(coalesce(ir.concepto, '')), ''),
+      'Reparto a fondo del evento "' || coalesce(v_evento.nombre, p_evento_id::text) || '"'
+    ),
+    ir.cantidad,
+    ir.evento_id,
+    ir.id
+  from inserted_repartos ir
+  where ir.socio_id is null
+    and ir.cantidad > 0;
 end;
 $$;
 
@@ -519,7 +520,23 @@ returns void
 language plpgsql
 security definer
 as $$
+declare
+  v_reparto record;
+  v_evento_nombre text;
+  v_concepto_prev text;
+  v_concepto_nuevo text;
+  v_movimiento_id uuid;
 begin
+  select r.*
+  into v_reparto
+  from public.repartos_evento r
+  where r.id = p_reparto_id
+  for update;
+
+  if not found then
+    raise exception 'Reparto no encontrado';
+  end if;
+
   update public.repartos_evento
   set
     fecha = p_fecha,
@@ -527,8 +544,51 @@ begin
     cantidad = p_cantidad
   where id = p_reparto_id;
 
-  if not found then
-    raise exception 'Reparto no encontrado';
+  if v_reparto.socio_id is null then
+    select e.nombre into v_evento_nombre
+    from public.eventos e
+    where e.id = v_reparto.evento_id;
+
+    v_concepto_prev := coalesce(
+      nullif(trim(coalesce(v_reparto.concepto, '')), ''),
+      'Reparto a fondo del evento "' || coalesce(v_evento_nombre, v_reparto.evento_id::text) || '"'
+    );
+
+    v_concepto_nuevo := coalesce(
+      nullif(trim(coalesce(p_concepto, '')), ''),
+      'Reparto a fondo del evento "' || coalesce(v_evento_nombre, v_reparto.evento_id::text) || '"'
+    );
+
+    select fm.id
+    into v_movimiento_id
+    from public.fondo_movimientos fm
+    where fm.reparto_id = p_reparto_id
+      and fm.cantidad > 0
+    order by fm.created_at desc
+    limit 1;
+
+    if v_movimiento_id is null then
+      select fm.id
+      into v_movimiento_id
+      from public.fondo_movimientos fm
+      where fm.evento_id = v_reparto.evento_id
+        and fm.cantidad = v_reparto.cantidad
+        and fm.fecha = v_reparto.fecha
+        and fm.concepto = v_concepto_prev
+        and fm.cantidad > 0
+      order by fm.created_at desc
+      limit 1;
+    end if;
+
+    if v_movimiento_id is not null then
+      update public.fondo_movimientos
+      set
+        fecha = p_fecha,
+        concepto = v_concepto_nuevo,
+        cantidad = p_cantidad,
+        reparto_id = p_reparto_id
+      where id = v_movimiento_id;
+    end if;
   end if;
 end;
 $$;
@@ -540,13 +600,61 @@ returns void
 language plpgsql
 security definer
 as $$
+declare
+  v_reparto record;
+  v_evento_nombre text;
+  v_concepto_prev text;
+  v_movimiento_id uuid;
 begin
-  delete from public.repartos_evento
-  where id = p_reparto_id;
+  select r.*
+  into v_reparto
+  from public.repartos_evento r
+  where r.id = p_reparto_id
+  for update;
 
   if not found then
     raise exception 'Reparto no encontrado';
   end if;
+
+  if v_reparto.socio_id is null then
+    select e.nombre into v_evento_nombre
+    from public.eventos e
+    where e.id = v_reparto.evento_id;
+
+    v_concepto_prev := coalesce(
+      nullif(trim(coalesce(v_reparto.concepto, '')), ''),
+      'Reparto a fondo del evento "' || coalesce(v_evento_nombre, v_reparto.evento_id::text) || '"'
+    );
+
+    select fm.id
+    into v_movimiento_id
+    from public.fondo_movimientos fm
+    where fm.reparto_id = p_reparto_id
+      and fm.cantidad > 0
+    order by fm.created_at desc
+    limit 1;
+
+    if v_movimiento_id is null then
+      select fm.id
+      into v_movimiento_id
+      from public.fondo_movimientos fm
+      where fm.evento_id = v_reparto.evento_id
+        and fm.cantidad = v_reparto.cantidad
+        and fm.fecha = v_reparto.fecha
+        and fm.concepto = v_concepto_prev
+        and fm.cantidad > 0
+      order by fm.created_at desc
+      limit 1;
+    end if;
+
+    if v_movimiento_id is not null then
+      delete from public.fondo_movimientos
+      where id = v_movimiento_id;
+    end if;
+  end if;
+
+  delete from public.repartos_evento
+  where id = p_reparto_id;
 end;
 $$;
 

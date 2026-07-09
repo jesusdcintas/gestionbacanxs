@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import ConfirmDialog from '../ui/ConfirmDialog';
+import { Button } from '../ui/Button';
 
 interface Props {
   eventoId: string;
@@ -30,13 +31,14 @@ export default function DeleteEventoButton({ eventoId }: Props) {
 
   return (
     <>
-      <button
+      <Button
         type="button"
+        variant="danger"
         onClick={() => setOpen(true)}
-        className="px-4 py-2 border border-danger text-danger hover:bg-danger-bg text-sm transition-colors"
+        className="w-full xl:w-auto"
       >
         Eliminar evento
-      </button>
+      </Button>
 
       {errorMessage ? (
         <div className="border border-danger bg-danger-bg px-3 py-2 text-sm text-danger">{errorMessage}</div>

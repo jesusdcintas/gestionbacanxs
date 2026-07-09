@@ -3,6 +3,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
 import { StampLabel } from '../ui/StampLabel';
+import ConfirmDialog from '../ui/ConfirmDialog';
 
 interface Socio {
   id: string;
@@ -63,6 +64,7 @@ export default function RepartoSection({
   const [editForm, setEditForm] = useState({ fecha: '', concepto: '', cantidad: '' });
   const [savingEdit, setSavingEdit] = useState(false);
   const [savingDeleteId, setSavingDeleteId] = useState<string | null>(null);
+  const [repartoAEliminar, setRepartoAEliminar] = useState<RepartoHistorico | null>(null);
 
   useEffect(() => {
     setRepartosHistoricos(ordenarRepartos(repartosIniciales));
@@ -153,14 +155,19 @@ export default function RepartoSection({
     }
   };
 
-  const deleteReparto = async (item: RepartoHistorico) => {
-    if (!window.confirm('¿Eliminar este reparto del histórico?')) return;
+  const pedirEliminarReparto = (item: RepartoHistorico) => {
+    if (savingDeleteId) return;
+    setRepartoAEliminar(item);
+  };
 
-    setSavingDeleteId(item.id);
+  const confirmarEliminarReparto = async () => {
+    if (!repartoAEliminar) return;
+
+    setSavingDeleteId(repartoAEliminar.id);
     setErrorMessage(null);
 
     try {
-      const response = await fetch(`/api/repartos/${eventoId}/${item.id}`, {
+      const response = await fetch(`/api/repartos/${eventoId}/${repartoAEliminar.id}`, {
         method: 'DELETE',
       });
 
@@ -169,10 +176,11 @@ export default function RepartoSection({
         throw new Error(payload?.error || 'No se pudo eliminar el reparto');
       }
 
-      setRepartosHistoricos((prev) => prev.filter((current) => current.id !== item.id));
-      if (editingRepartoId === item.id) {
+      setRepartosHistoricos((prev) => prev.filter((current) => current.id !== repartoAEliminar.id));
+      if (editingRepartoId === repartoAEliminar.id) {
         cancelEdit();
       }
+      setRepartoAEliminar(null);
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Error al eliminar el reparto';
       setErrorMessage(msg);
@@ -390,32 +398,34 @@ export default function RepartoSection({
                 return (
                   <div key={item.id} className="border border-border p-3 bg-[#0a0a0a] space-y-3">
                     {!estaEditando ? (
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-3">
                         <div>
                           <p className="text-sm text-text-primary font-medium">{item.nombre}</p>
                           <p className="text-xs text-text-secondary" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                             {item.fecha}{item.concepto ? ` · ${item.concepto}` : ''}
                           </p>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                           <p className="text-sm text-accent font-semibold" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                             {Number(item.cantidad).toFixed(2)} €
                           </p>
-                          <button
+                          <Button
                             type="button"
+                            variant="secondary"
+                            size="sm"
                             onClick={() => startEdit(item)}
-                            className="text-[11px] uppercase tracking-[0.08em] text-text-primary hover:text-accent transition-colors"
                           >
                             Editar
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
-                            onClick={() => deleteReparto(item)}
+                            variant="danger"
+                            size="sm"
+                            onClick={() => pedirEliminarReparto(item)}
                             disabled={savingDeleteId === item.id}
-                            className="text-[11px] uppercase tracking-[0.08em] text-danger hover:text-text-primary transition-colors disabled:opacity-50"
                           >
-                            {savingDeleteId === item.id ? 'Eliminando...' : 'Eliminar'}
-                          </button>
+                            {savingDeleteId === item.id ? 'Eliminando...' : 'Eliminar reparto'}
+                          </Button>
                         </div>
                       </div>
                     ) : (
@@ -461,6 +471,23 @@ export default function RepartoSection({
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(repartoAEliminar)}
+        title="Eliminar reparto"
+        description={
+          repartoAEliminar
+            ? `Vas a eliminar el reparto de ${repartoAEliminar.nombre} (${Number(repartoAEliminar.cantidad).toFixed(2)} €) del histórico.`
+            : 'Vas a eliminar este reparto del histórico.'
+        }
+        confirmLabel="Eliminar reparto"
+        destructive
+        isLoading={Boolean(repartoAEliminar && savingDeleteId === repartoAEliminar.id)}
+        onClose={() => {
+          if (!savingDeleteId) setRepartoAEliminar(null);
+        }}
+        onConfirm={confirmarEliminarReparto}
+      />
     </Card>
   );
 }

@@ -105,28 +105,28 @@ const estadoStamp = getEstadoStamp(estadoVisible);
       </div>
       <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex">
         {eventoAnteriorId ? (
-          <a href={`/eventos/${eventoAnteriorId}/detalle`} class="w-full px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors text-center">
+          <a href={`/eventos/${eventoAnteriorId}/detalle`} class="inline-flex h-10 w-full items-center justify-center rounded-xs border border-border-strong bg-transparent px-4 text-sm text-text-primary transition-colors duration-150 hover:border-text-primary/40 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a] xl:w-auto">
             ← Evento anterior
           </a>
         ) : (
-          <span class="w-full px-4 py-2 border border-border text-text-secondary text-sm opacity-50 cursor-not-allowed text-center">
+          <span class="inline-flex h-10 w-full cursor-not-allowed items-center justify-center rounded-xs border border-border text-sm text-text-secondary opacity-50 xl:w-auto">
             ← Evento anterior
           </span>
         )}
         {eventoSiguienteId ? (
-          <a href={`/eventos/${eventoSiguienteId}/detalle`} class="w-full px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors text-center">
+          <a href={`/eventos/${eventoSiguienteId}/detalle`} class="inline-flex h-10 w-full items-center justify-center rounded-xs border border-border-strong bg-transparent px-4 text-sm text-text-primary transition-colors duration-150 hover:border-text-primary/40 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a] xl:w-auto">
             Evento siguiente →
           </a>
         ) : (
-          <span class="w-full px-4 py-2 border border-border text-text-secondary text-sm opacity-50 cursor-not-allowed text-center">
+          <span class="inline-flex h-10 w-full cursor-not-allowed items-center justify-center rounded-xs border border-border text-sm text-text-secondary opacity-50 xl:w-auto">
             Evento siguiente →
           </span>
         )}
-        <a href={`/eventos/${id}`} class="w-full px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors text-center">
+        <a href={`/eventos/${id}`} class="inline-flex h-10 w-full items-center justify-center rounded-xs border border-border-strong bg-transparent px-4 text-sm text-text-primary transition-colors duration-150 hover:border-text-primary/40 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a] xl:w-auto">
           Editar evento
         </a>
         <DeleteEventoButton eventoId={id} client:load />
-        <a href="/eventos" class="w-full px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors text-center">
+        <a href="/eventos" class="inline-flex h-10 w-full items-center justify-center rounded-xs border border-border-strong bg-transparent px-4 text-sm text-text-primary transition-colors duration-150 hover:border-text-primary/40 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a] xl:w-auto">
           ← Volver
         </a>
       </div>
