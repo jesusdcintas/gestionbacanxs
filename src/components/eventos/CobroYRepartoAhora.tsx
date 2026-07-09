@@ -189,18 +189,18 @@ function CobroYRepartoAhoraInner({ eventoId, profiles, socios }: Props) {
       </Card>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-4xl border border-border-strong bg-surface p-5 space-y-5">
-            <div className="flex items-center justify-between gap-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 p-4">
+          <div className="my-6 w-full max-w-4xl border border-border-strong bg-surface p-4 sm:p-5 space-y-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <StampLabel rotate="left" variant="accent">
                   Cobro + reparto
                 </StampLabel>
-                <h3 className="mt-2 text-2xl uppercase italic" style={{ fontFamily: '"Archivo Black", sans-serif' }}>
+                <h3 className="mt-2 text-xl uppercase italic sm:text-2xl" style={{ fontFamily: '"Archivo Black", sans-serif' }}>
                   Nuevo cobro combinado
                 </h3>
               </div>
-              <Button type="button" variant="secondary" size="sm" onClick={reset} disabled={loading}>
+              <Button type="button" variant="secondary" size="sm" onClick={reset} disabled={loading} className="w-full sm:w-auto">
                 Cerrar
               </Button>
             </div>
@@ -283,9 +283,9 @@ function CobroYRepartoAhoraInner({ eventoId, profiles, socios }: Props) {
 
                 <div className="grid grid-cols-1 gap-3">
                   {socios.map((socio) => (
-                    <div key={socio.id} className="flex items-center gap-3 border border-border p-3">
-                      <span className="flex-1 text-sm text-text-primary font-medium">{socio.nombre}</span>
-                      <div className="w-36">
+                    <div key={socio.id} className="flex flex-wrap items-center gap-3 border border-border p-3 sm:flex-nowrap">
+                      <span className="min-w-0 flex-1 text-sm text-text-primary font-medium">{socio.nombre}</span>
+                      <div className="w-full sm:w-36">
                         <Input
                           type="number"
                           min="0"
@@ -298,14 +298,14 @@ function CobroYRepartoAhoraInner({ eventoId, profiles, socios }: Props) {
                     </div>
                   ))}
 
-                  <div className="flex items-center gap-3 border-2 border-accent/40 p-3">
-                    <div className="flex flex-1 items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-3 border-2 border-accent/40 p-3 sm:flex-nowrap">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
                       <StampLabel variant="accent" rotate="left">
                         Fondo
                       </StampLabel>
                       <span className="text-sm text-text-primary font-medium">Reinversión / Fondo</span>
                     </div>
-                    <div className="w-36">
+                    <div className="w-full sm:w-36">
                       <Input
                         type="number"
                         min="0"

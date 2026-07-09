@@ -25,7 +25,7 @@ const { data, error } = await getDashboardData(Astro);
       <section>
         <div class="mb-6">
           <p class="text-[11px] uppercase tracking-[0.24em] text-text-secondary">Resumen mensual</p>
-          <h2 class="mt-2 text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">
+          <h2 class="mt-2 text-2xl uppercase italic sm:text-3xl" style="font-family: 'Archivo Black', sans-serif;">
             Visión general
           </h2>
           <p class="mt-2 text-sm text-text-secondary">Métricas calculadas en SSR con datos reales de Supabase.</p>
@@ -49,7 +49,7 @@ const { data, error } = await getDashboardData(Astro);
           <CardContent>
             <p class="text-sm text-text-primary">
               Usuario identificado:
-              <span class="ml-2 border border-border bg-surface px-2 py-1 text-accent" style="font-family: 'JetBrains Mono', monospace;">{data?.userName ?? 'Usuario'}</span>
+              <span class="ml-0 mt-2 inline-block border border-border bg-surface px-2 py-1 text-accent sm:ml-2 sm:mt-0" style="font-family: 'JetBrains Mono', monospace;">{data?.userName ?? 'Usuario'}</span>
             </p>
           </CardContent>
         </Card>

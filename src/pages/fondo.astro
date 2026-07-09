@@ -38,7 +38,7 @@ const formatCurrency = (value: number) =>
   <div class="space-y-6">
     <div>
       <p class="text-[11px] uppercase tracking-[0.24em] text-text-secondary">Caja común</p>
-      <h1 class="mt-2 text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">
+      <h1 class="mt-2 text-2xl uppercase italic sm:text-3xl" style="font-family: 'Archivo Black', sans-serif;">
         Fondo de empresa
       </h1>
       <p class="mt-2 text-sm text-text-secondary">
@@ -61,7 +61,7 @@ const formatCurrency = (value: number) =>
         </CardHeader>
         <CardContent>
           <p
-            class={`text-3xl tracking-tight ${saldo >= 0 ? 'text-accent' : 'text-danger'}`}
+            class={`text-2xl tracking-tight sm:text-3xl ${saldo >= 0 ? 'text-accent' : 'text-danger'}`}
             style="font-family: 'JetBrains Mono', monospace;"
           >
             {formatCurrency(saldo)}
@@ -76,7 +76,7 @@ const formatCurrency = (value: number) =>
         </CardHeader>
         <CardContent>
           <p
-            class="text-3xl tracking-tight text-text-primary"
+            class="text-2xl tracking-tight text-text-primary sm:text-3xl"
             style="font-family: 'JetBrains Mono', monospace;"
           >
             +{formatCurrency(totalEntradas)}
@@ -91,7 +91,7 @@ const formatCurrency = (value: number) =>
         </CardHeader>
         <CardContent>
           <p
-            class="text-3xl tracking-tight text-danger"
+            class="text-2xl tracking-tight text-danger sm:text-3xl"
             style="font-family: 'JetBrains Mono', monospace;"
           >
             −{formatCurrency(totalSalidas)}

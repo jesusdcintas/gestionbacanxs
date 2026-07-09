@@ -136,11 +136,11 @@ export default function IngresoForm({ ingreso, eventos, profiles }: Props) {
           </div>
         </div>
 
-        <div className="flex gap-3 pt-4">
-          <Button type="submit" variant="primary">
+        <div className="flex flex-col gap-3 pt-4 sm:flex-row">
+          <Button type="submit" variant="primary" className="w-full sm:w-auto">
             {ingreso ? 'Actualizar' : 'Crear Ingreso'}
           </Button>
-          <Button type="button" variant="secondary" onclick="window.location.href='/ingresos'">
+          <Button type="button" variant="secondary" onclick="window.location.href='/ingresos'" className="w-full sm:w-auto">
             Cancelar
           </Button>
         </div>

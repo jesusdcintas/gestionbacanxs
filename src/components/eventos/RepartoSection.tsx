@@ -316,9 +316,9 @@ export default function RepartoSection({
 
           <div className="space-y-3">
             {socios.map((socio) => (
-              <div key={socio.id} className="flex items-center gap-3 border border-border p-3">
-                <span className="flex-1 text-sm text-text-primary font-medium">{socio.nombre}</span>
-                <div className="w-36">
+              <div key={socio.id} className="flex flex-wrap items-center gap-3 border border-border p-3 sm:flex-nowrap">
+                <span className="min-w-0 flex-1 text-sm text-text-primary font-medium">{socio.nombre}</span>
+                <div className="w-full sm:w-36">
                   <Input
                     type="number"
                     min="0"
@@ -331,12 +331,12 @@ export default function RepartoSection({
               </div>
             ))}
 
-            <div className="flex items-center gap-3 border-2 border-accent/40 p-3">
-              <div className="flex flex-1 items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3 border-2 border-accent/40 p-3 sm:flex-nowrap">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
                 <StampLabel variant="accent" rotate="left">Fondo</StampLabel>
                 <span className="text-sm text-text-primary font-medium">Reinversión / Fondo</span>
               </div>
-              <div className="w-36">
+              <div className="w-full sm:w-36">
                 <Input
                   type="number"
                   min="0"

@@ -32,7 +32,7 @@ const formatCurrency = (value: number) =>
     <div>
       <p class="text-[11px] uppercase tracking-[0.24em] text-text-secondary">Balance</p>
       <h1
-        class="mt-2 text-3xl uppercase italic"
+        class="mt-2 text-2xl uppercase italic sm:text-3xl"
         style="font-family: 'Archivo Black', sans-serif;"
       >
         Balance financiero
@@ -155,7 +155,7 @@ const formatCurrency = (value: number) =>
                         {cat.porcentaje.toFixed(1)}%
                       </div>
                       <div
-                        class="text-sm text-danger min-w-25 text-right"
+                        class="text-sm text-danger text-right"
                         style="font-family: 'JetBrains Mono', monospace;"
                       >
                         −{formatCurrency(cat.total)}

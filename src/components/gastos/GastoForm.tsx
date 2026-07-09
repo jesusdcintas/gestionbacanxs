@@ -217,9 +217,9 @@ export default function GastoForm({
 
           <div className="space-y-3">
             {profiles.map((profile) => (
-              <div key={profile.id} className="flex items-center gap-3">
-                <span className="flex-1 text-sm text-text-primary">{profile.nombre}</span>
-                <div className="w-40">
+              <div key={profile.id} className="flex flex-wrap items-center gap-3 sm:flex-nowrap">
+                <span className="min-w-0 flex-1 text-sm text-text-primary">{profile.nombre}</span>
+                <div className="w-full sm:w-40">
                   <Input
                     type="number"
                     step="0.01"
@@ -233,9 +233,9 @@ export default function GastoForm({
               </div>
             ))}
 
-            <div className="flex items-center gap-3 border-t border-border pt-3">
-              <span className="flex-1 text-sm text-text-primary">Fondo de empresa</span>
-              <div className="w-40">
+            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 sm:flex-nowrap">
+              <span className="min-w-0 flex-1 text-sm text-text-primary">Fondo de empresa</span>
+              <div className="w-full sm:w-40">
                 <Input
                   type="number"
                   step="0.01"
@@ -281,11 +281,11 @@ export default function GastoForm({
           </div>
         </div>
 
-        <div className="flex gap-3 pt-4">
-          <Button type="submit" variant="primary" disabled={!puedeEnviar}>
+        <div className="flex flex-col gap-3 pt-4 sm:flex-row">
+          <Button type="submit" variant="primary" disabled={!puedeEnviar} className="w-full sm:w-auto">
             {gasto ? 'Actualizar' : 'Crear Gasto'}
           </Button>
-          <Button type="button" variant="secondary" onClick={() => (window.location.href = '/gastos')}>
+          <Button type="button" variant="secondary" onClick={() => (window.location.href = '/gastos')} className="w-full sm:w-auto">
             Cancelar
           </Button>
         </div>

@@ -88,10 +88,10 @@ const estadoStamp = getEstadoStamp(estadoVisible);
 
 <AppLayout title={evento.nombre}>
   <div class="max-w-6xl mx-auto space-y-6">
-    <div class="flex items-start justify-between">
+    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
       <div>
-        <div class="flex items-center gap-3 mb-2">
-          <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">{evento.nombre}</h1>
+        <div class="mb-2 flex flex-wrap items-center gap-2 sm:gap-3">
+          <h1 class="text-2xl uppercase italic sm:text-3xl" style="font-family: 'Archivo Black', sans-serif;">{evento.nombre}</h1>
           <StampLabel variant={estadoStamp.variant} rotate={estadoStamp.rotate}>
             {getEstadoVisibleLabel(estadoVisible)}
           </StampLabel>
@@ -103,30 +103,30 @@ const estadoStamp = getEstadoStamp(estadoVisible);
           {evento.fecha} {evento.lugar ? `· ${evento.lugar}` : ''}
         </p>
       </div>
-      <div class="flex gap-2">
+      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:flex">
         {eventoAnteriorId ? (
-          <a href={`/eventos/${eventoAnteriorId}/detalle`} class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+          <a href={`/eventos/${eventoAnteriorId}/detalle`} class="w-full px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors text-center">
             ← Evento anterior
           </a>
         ) : (
-          <span class="px-4 py-2 border border-border text-text-secondary text-sm opacity-50 cursor-not-allowed">
+          <span class="w-full px-4 py-2 border border-border text-text-secondary text-sm opacity-50 cursor-not-allowed text-center">
             ← Evento anterior
           </span>
         )}
         {eventoSiguienteId ? (
-          <a href={`/eventos/${eventoSiguienteId}/detalle`} class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+          <a href={`/eventos/${eventoSiguienteId}/detalle`} class="w-full px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors text-center">
             Evento siguiente →
           </a>
         ) : (
-          <span class="px-4 py-2 border border-border text-text-secondary text-sm opacity-50 cursor-not-allowed">
+          <span class="w-full px-4 py-2 border border-border text-text-secondary text-sm opacity-50 cursor-not-allowed text-center">
             Evento siguiente →
           </span>
         )}
-        <a href={`/eventos/${id}`} class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+        <a href={`/eventos/${id}`} class="w-full px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors text-center">
           Editar evento
         </a>
         <DeleteEventoButton eventoId={id} client:load />
-        <a href="/eventos" class="px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors">
+        <a href="/eventos" class="w-full px-4 py-2 border border-border-strong text-text-primary hover:bg-surface-hover text-sm transition-colors text-center">
           ← Volver
         </a>
       </div>
@@ -138,14 +138,14 @@ const estadoStamp = getEstadoStamp(estadoVisible);
           <StampLabel rotate="none">Estados del evento</StampLabel>
           <p class="mt-2 text-sm text-text-secondary">Puedes actualizar trabajo y cobro desde esta vista.</p>
         </div>
-        <form method="POST" action={`/api/eventos/${id}/estado`} class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:flex md:items-end">
+        <form method="POST" action={`/api/eventos/${id}/estado`} class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:w-auto md:flex md:items-end">
           <input type="hidden" name="redirect_to" value={`/eventos/${id}/detalle`} />
 
           <label class="flex flex-col gap-1">
             <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Trabajo</span>
             <select
               name="estado_trabajo"
-              class="min-w-45 border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+              class="w-full min-w-0 border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none md:min-w-45"
             >
               <option value="confirmado" selected={evento.estado_trabajo === 'confirmado'}>Confirmado</option>
               <option value="realizado" selected={evento.estado_trabajo === 'realizado'}>Realizado</option>
@@ -157,7 +157,7 @@ const estadoStamp = getEstadoStamp(estadoVisible);
             <span class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Financiero</span>
             <select
               name="estado_financiero"
-              class="min-w-45 border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+              class="w-full min-w-0 border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none md:min-w-45"
             >
               <option value="no_pagado" selected={evento.estado_financiero === 'no_pagado'}>No pagado</option>
               <option value="parcialmente_pagado" selected={evento.estado_financiero === 'parcialmente_pagado'}>Parcialmente pagado</option>
@@ -167,7 +167,7 @@ const estadoStamp = getEstadoStamp(estadoVisible);
 
           <button
             type="submit"
-            class="h-10.5 border border-accent bg-accent px-4 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-accent-hover"
+            class="h-10.5 w-full border border-accent bg-accent px-4 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-accent-hover sm:col-span-2 md:w-auto"
           >
             Guardar estados
           </button>
@@ -181,10 +181,10 @@ const estadoStamp = getEstadoStamp(estadoVisible);
           <StampLabel rotate="none">Parámetros fiscales</StampLabel>
           <p class="mt-2 text-sm text-text-secondary">Configura si es facturable y el porcentaje de retención IRPF.</p>
         </div>
-        <form method="POST" action={`/api/eventos/${id}/facturacion`} class="grid grid-cols-1 gap-3 sm:grid-cols-2 md:flex md:items-end">
+        <form method="POST" action={`/api/eventos/${id}/facturacion`} class="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 md:w-auto md:flex md:items-end">
           <input type="hidden" name="redirect_to" value={`/eventos/${id}/detalle`} />
 
-          <label class="flex h-10.5 items-center gap-2 border border-border bg-[#0a0a0a] px-3">
+          <label class="flex h-10.5 w-full items-center gap-2 border border-border bg-[#0a0a0a] px-3 sm:w-auto">
             <input
               type="checkbox"
               name="con_factura"
@@ -204,13 +204,13 @@ const estadoStamp = getEstadoStamp(estadoVisible);
               max="100"
               step="0.01"
               value={Number(evento.retencion_irpf).toFixed(2)}
-              class="min-w-45 border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none"
+              class="w-full min-w-0 border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none md:min-w-45"
             />
           </label>
 
           <button
             type="submit"
-            class="h-10.5 border border-accent bg-accent px-4 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-accent-hover"
+            class="h-10.5 w-full border border-accent bg-accent px-4 text-sm font-bold text-[#0a0a0a] transition-colors hover:bg-accent-hover sm:col-span-2 md:w-auto"
           >
             Guardar IRPF
           </button>

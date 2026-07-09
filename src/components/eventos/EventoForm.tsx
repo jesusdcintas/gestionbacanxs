@@ -393,11 +393,11 @@ export default function EventoForm({
 
             <div className="space-y-3">
               {socios.map((socio) => (
-                <div key={socio.id} className="flex items-center gap-3 border border-border bg-[#0a0a0a] p-3">
-                  <div className="flex-1">
+                <div key={socio.id} className="flex flex-wrap items-center gap-3 border border-border bg-[#0a0a0a] p-3 sm:flex-nowrap">
+                  <div className="min-w-0 flex-1">
                     <span className="text-sm font-medium text-text-primary">{socio.nombre}</span>
                   </div>
-                  <div className="w-36">
+                  <div className="w-full sm:w-36">
                     <Input
                       type="number"
                       name={`reparto_${socio.id}`}
@@ -408,16 +408,16 @@ export default function EventoForm({
                       placeholder="0.00"
                     />
                   </div>
-                  <span className="w-8 text-sm text-text-secondary">€</span>
+                  <span className="text-sm text-text-secondary sm:w-8">€</span>
                 </div>
               ))}
 
-              <div className="flex items-center gap-3 border-2 border-accent/40 bg-[#0a0a0a] p-3">
-                <div className="flex flex-1 items-center gap-2">
+              <div className="flex flex-wrap items-center gap-3 border-2 border-accent/40 bg-[#0a0a0a] p-3 sm:flex-nowrap">
+                <div className="flex min-w-0 flex-1 items-center gap-2">
                   <StampLabel variant="accent" rotate="left">Fondo</StampLabel>
                   <span className="text-sm font-medium text-text-primary">Fondo de empresa</span>
                 </div>
-                <div className="w-36">
+                <div className="w-full sm:w-36">
                   <Input
                     type="number"
                     name="reparto_fondo"
@@ -428,7 +428,7 @@ export default function EventoForm({
                     placeholder="0.00"
                   />
                 </div>
-                <span className="w-8 text-sm text-text-secondary">€</span>
+                <span className="text-sm text-text-secondary sm:w-8">€</span>
               </div>
             </div>
 
@@ -453,11 +453,11 @@ export default function EventoForm({
           </div>
         )}
 
-        <div className="flex gap-3 pt-4">
-          <Button type="submit" variant="primary" disabled={repartoSePasa}>
+        <div className="flex flex-col gap-3 pt-4 sm:flex-row">
+          <Button type="submit" variant="primary" disabled={repartoSePasa} className="w-full sm:w-auto">
             Guardar cambios
           </Button>
-          <Button type="button" variant="secondary" onClick={() => (window.location.href = '/eventos')}>
+          <Button type="button" variant="secondary" onClick={() => (window.location.href = '/eventos')} className="w-full sm:w-auto">
             Cancelar
           </Button>
         </div>
