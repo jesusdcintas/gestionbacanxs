@@ -1,14 +1,40 @@
-import type { BalanceSocio } from '../../services/balance';
+import { Fragment, useState, type KeyboardEvent } from 'react';
+import { ChevronDown } from 'lucide-react';
+import type { BalanceSocio, RepartosDetallePorSocio } from '../../services/balance';
 import { StampLabel } from '../ui/StampLabel';
 
 interface Props {
   balances: BalanceSocio[];
+  repartosDetallePorSocio: RepartosDetallePorSocio;
 }
 
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Math.abs(value));
 
-export default function BalanceSociosTable({ balances }: Props) {
+const formatDate = (value: string | null) => {
+  if (!value) return '—';
+
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(new Date(value));
+};
+
+export default function BalanceSociosTable({ balances, repartosDetallePorSocio }: Props) {
+  const [expandedSocioId, setExpandedSocioId] = useState<string | null>(null);
+
+  const toggleRow = (socioId: string) => {
+    setExpandedSocioId((prev) => (prev === socioId ? null : socioId));
+  };
+
+  const onRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, socioId: string) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggleRow(socioId);
+    }
+  };
+
   if (balances.length === 0) {
     return (
       <p className="text-sm text-text-secondary text-center py-8">
@@ -96,36 +122,108 @@ export default function BalanceSociosTable({ balances }: Props) {
             <tbody>
               {balances.map((b, idx) => {
                 const promedio = b.eventosTrabajados > 0 ? b.totalCobrado / b.eventosTrabajados : 0;
+                const isExpanded = expandedSocioId === b.socio_id;
+                const detalles = repartosDetallePorSocio[b.socio_id] ?? [];
 
                 return (
-                  <tr
-                    key={`repartos-${b.socio_id}`}
-                    className="border-b border-border hover:bg-surface-hover transition-colors"
-                  >
-                    <td className="py-3 px-3">
-                      <StampLabel rotate={idx % 2 === 0 ? 'left' : 'right'} variant="outline">
-                        {b.nombre}
-                      </StampLabel>
-                    </td>
-                    <td
-                      className="py-3 px-3 text-right text-text-primary"
-                      style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                  <Fragment key={`repartos-${b.socio_id}`}>
+                    <tr
+                      className={`border-b border-border transition-colors ${
+                        isExpanded ? 'bg-surface-hover' : 'hover:bg-surface-hover'
+                      } cursor-pointer`}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
+                      onClick={() => toggleRow(b.socio_id)}
+                      onKeyDown={(event) => onRowKeyDown(event, b.socio_id)}
                     >
-                      {formatCurrency(b.totalCobrado)}
-                    </td>
-                    <td
-                      className="py-3 px-3 text-right text-text-secondary"
-                      style={{ fontFamily: '"JetBrains Mono", monospace' }}
-                    >
-                      {b.eventosTrabajados}
-                    </td>
-                    <td
-                      className="py-3 px-3 text-right text-text-secondary"
-                      style={{ fontFamily: '"JetBrains Mono", monospace' }}
-                    >
-                      {formatCurrency(promedio)}
-                    </td>
-                  </tr>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-2">
+                          <ChevronDown
+                            className={`h-4 w-4 text-accent transition-transform duration-200 ${
+                              isExpanded ? 'rotate-180' : 'rotate-0'
+                            }`}
+                            strokeWidth={1.75}
+                          />
+                          <StampLabel rotate={idx % 2 === 0 ? 'left' : 'right'} variant="outline">
+                            {b.nombre}
+                          </StampLabel>
+                        </div>
+                      </td>
+                      <td
+                        className="py-3 px-3 text-right text-text-primary"
+                        style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                      >
+                        {formatCurrency(b.totalCobrado)}
+                      </td>
+                      <td
+                        className="py-3 px-3 text-right text-text-secondary"
+                        style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                      >
+                        {b.eventosTrabajados}
+                      </td>
+                      <td
+                        className="py-3 px-3 text-right text-text-secondary"
+                        style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                      >
+                        {formatCurrency(promedio)}
+                      </td>
+                    </tr>
+
+                    {isExpanded && (
+                      <tr className="border-b border-border bg-[#121212]">
+                        <td colSpan={4} className="px-3 pb-4 pt-1">
+                          <div className="ml-6 border border-border bg-surface/40 p-3">
+                            {detalles.length === 0 ? (
+                              <p className="text-sm text-text-secondary">
+                                Sin repartos registrados todavía
+                              </p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b border-border">
+                                      <th className="text-left py-2 pr-3 text-[11px] uppercase tracking-[0.08em] text-text-secondary font-medium">
+                                        Evento
+                                      </th>
+                                      <th className="text-left py-2 px-3 text-[11px] uppercase tracking-[0.08em] text-text-secondary font-medium">
+                                        Fecha
+                                      </th>
+                                      <th className="text-right py-2 pl-3 text-[11px] uppercase tracking-[0.08em] text-text-secondary font-medium">
+                                        Importe cobrado
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {detalles.map((detalle) => (
+                                      <tr
+                                        key={`${b.socio_id}-${detalle.evento_id}`}
+                                        className="border-b border-border/70 last:border-0"
+                                      >
+                                        <td className="py-2 pr-3 text-text-primary">{detalle.eventoNombre}</td>
+                                        <td
+                                          className="py-2 px-3 text-text-secondary"
+                                          style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                                        >
+                                          {formatDate(detalle.eventoFecha)}
+                                        </td>
+                                        <td
+                                          className="py-2 pl-3 text-right text-text-primary"
+                                          style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                                        >
+                                          {formatCurrency(detalle.totalCobrado)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>

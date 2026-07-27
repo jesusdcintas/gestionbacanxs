@@ -13,6 +13,15 @@ export interface BalanceSocio {
   eventosTrabajados: number; // Total de eventos trabajados
 }
 
+export interface RepartoDetalleEvento {
+  evento_id: string;
+  eventoNombre: string;
+  eventoFecha: string | null;
+  totalCobrado: number;
+}
+
+export type RepartosDetallePorSocio = Record<string, RepartoDetalleEvento[]>;
+
 /**
  * Obtiene métricas por socio para:
  * 1) Pendiente de reembolso (totalAportado no reembolsado)
@@ -103,6 +112,87 @@ export async function getBalanceSocio(
 ): Promise<BalanceSocio | null> {
   const balances = await getBalanceSocios(context);
   return balances.find(b => b.socio_id === socioId) || null;
+}
+
+/**
+ * Historico de repartos cobrados por socio, agrupado por evento.
+ * Solo incluye repartos positivos y socios no nulos.
+ */
+export async function getRepartosDetallePorSocio(
+  context: APIContext
+): Promise<RepartosDetallePorSocio> {
+  const supabase = getSupabaseServerClient(context);
+
+  type EventoJoin = {
+    nombre: string | null;
+    fecha: string | null;
+  };
+
+  type RepartoRow = {
+    socio_id: string | null;
+    evento_id: string;
+    cantidad: number | string;
+    eventos: EventoJoin | EventoJoin[] | null;
+  };
+
+  const { data, error } = await supabase
+    .from('repartos_evento')
+    .select('socio_id, evento_id, cantidad, eventos(nombre, fecha)')
+    .not('socio_id', 'is', null)
+    .gt('cantidad', 0);
+
+  if (error) {
+    console.error('Error fetching detalle repartos por socio:', error);
+    throw new Error('No se pudo cargar el detalle de repartos por socio');
+  }
+
+  const acumulado = new Map<string, RepartoDetalleEvento & { socio_id: string }>();
+
+  for (const row of (data ?? []) as RepartoRow[]) {
+    if (!row.socio_id) continue;
+
+    const eventoJoin = Array.isArray(row.eventos) ? row.eventos[0] ?? null : row.eventos;
+    const eventoNombre = eventoJoin?.nombre?.trim() || 'Evento sin nombre';
+    const eventoFecha = eventoJoin?.fecha ?? null;
+    const cantidad = Number(row.cantidad) || 0;
+    const key = `${row.socio_id}::${row.evento_id}`;
+    const previo = acumulado.get(key);
+
+    if (previo) {
+      previo.totalCobrado += cantidad;
+      continue;
+    }
+
+    acumulado.set(key, {
+      socio_id: row.socio_id,
+      evento_id: row.evento_id,
+      eventoNombre,
+      eventoFecha,
+      totalCobrado: cantidad,
+    });
+  }
+
+  const salida: RepartosDetallePorSocio = {};
+
+  for (const item of acumulado.values()) {
+    if (!salida[item.socio_id]) salida[item.socio_id] = [];
+    salida[item.socio_id].push({
+      evento_id: item.evento_id,
+      eventoNombre: item.eventoNombre,
+      eventoFecha: item.eventoFecha,
+      totalCobrado: item.totalCobrado,
+    });
+  }
+
+  for (const socioId of Object.keys(salida)) {
+    salida[socioId].sort((a, b) => {
+      const ta = a.eventoFecha ? new Date(a.eventoFecha).getTime() : 0;
+      const tb = b.eventoFecha ? new Date(b.eventoFecha).getTime() : 0;
+      return tb - ta;
+    });
+  }
+
+  return salida;
 }
 
 /**
