@@ -117,7 +117,12 @@ begin
       when v_evento.con_factura then ((v_evento.presupuesto / 1.21) * coalesce(v_evento.retencion_irpf, 0) / 100)
       else 0
     end)
-    - coalesce((select sum(g.cantidad) from public.gastos g where g.evento_id = p_evento_id), 0)
+    - coalesce((
+      select sum(g.cantidad)
+      from public.gastos g
+      where g.evento_id = p_evento_id
+        and g.tipo_gasto = 'directo_evento'
+    ), 0)
   into v_neto_repartible;
 
   select coalesce(sum(r.cantidad), 0)
@@ -137,7 +142,9 @@ begin
   end if;
 
   if v_tanda > v_restante + 0.01 then
-    raise exception 'La tanda (%.2f) supera lo pendiente (%.2f)', v_tanda, v_restante;
+    raise exception 'La tanda (%) supera lo pendiente (%)',
+      to_char(v_tanda, 'FM999999990.00'),
+      to_char(v_restante, 'FM999999990.00');
   end if;
 
   insert into public.repartos_evento (evento_id, socio_id, cantidad, fecha, concepto)

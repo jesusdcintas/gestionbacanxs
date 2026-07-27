@@ -92,7 +92,9 @@ begin
     where coalesce((item->>'cantidad')::numeric, 0) > 0;
 
     if v_total_repartos > p_cantidad + 0.01 then
-      raise exception 'La suma del reparto (%.2f) supera la cantidad cobrada (%.2f)', v_total_repartos, p_cantidad;
+      raise exception 'La suma del reparto (%) supera la cantidad cobrada (%)',
+        to_char(v_total_repartos, 'FM999999990.00'),
+        to_char(p_cantidad, 'FM999999990.00');
     end if;
 
     for v_reparto in select * from jsonb_array_elements(p_repartos)

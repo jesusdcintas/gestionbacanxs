@@ -176,7 +176,9 @@ begin
     where coalesce((item->>'cantidad')::numeric, 0) > 0;
 
     if v_total_repartos > p_cantidad + 0.01 then
-      raise exception 'La suma del reparto (%.2f) supera la cantidad cobrada (%.2f)', v_total_repartos, p_cantidad;
+      raise exception 'La suma del reparto (%) supera la cantidad cobrada (%)',
+        to_char(v_total_repartos, 'FM999999990.00'),
+        to_char(p_cantidad, 'FM999999990.00');
     end if;
 
     for v_reparto in select * from jsonb_array_elements(p_repartos)
@@ -459,7 +461,12 @@ begin
       when v_evento.con_factura then ((v_evento.presupuesto / 1.21) * coalesce(v_evento.retencion_irpf, 0) / 100)
       else 0
     end)
-    - coalesce((select sum(g.cantidad) from public.gastos g where g.evento_id = p_evento_id), 0)
+    - coalesce((
+      select sum(g.cantidad)
+      from public.gastos g
+      where g.evento_id = p_evento_id
+        and g.tipo_gasto = 'directo_evento'
+    ), 0)
   into v_neto_repartible;
 
   select coalesce(sum(r.cantidad), 0)
@@ -479,7 +486,9 @@ begin
   end if;
 
   if v_tanda > v_restante + 0.01 then
-    raise exception 'La tanda (%.2f) supera lo pendiente (%.2f)', v_tanda, v_restante;
+    raise exception 'La tanda (%) supera lo pendiente (%)',
+      to_char(v_tanda, 'FM999999990.00'),
+      to_char(v_restante, 'FM999999990.00');
   end if;
 
   with inserted_repartos as (
