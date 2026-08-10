@@ -29,7 +29,7 @@ begin
   ) then
     alter table public.gastos
       add constraint gastos_tipo_gasto_check
-      check (tipo_gasto in ('directo_evento', 'inversion_empresa', 'consumible'));
+      check (tipo_gasto in ('directo_evento', 'inversion_empresa'));
   end if;
 end $$;
 
@@ -75,7 +75,7 @@ begin
 
   v_tipo_gasto := coalesce(nullif(trim(p_tipo_gasto), ''), 'directo_evento');
 
-  if v_tipo_gasto not in ('directo_evento', 'inversion_empresa', 'consumible') then
+  if v_tipo_gasto not in ('directo_evento', 'inversion_empresa') then
     raise exception 'Tipo de gasto no válido';
   end if;
 
@@ -83,7 +83,7 @@ begin
     raise exception 'Los gastos directos de evento deben tener evento_id';
   end if;
 
-  if v_tipo_gasto in ('inversion_empresa', 'consumible') and (p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0) then
+  if v_tipo_gasto in ('inversion_empresa') and (p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0) then
     raise exception 'Debes enviar al menos una fuente de pago';
   end if;
 
@@ -92,7 +92,7 @@ begin
   from jsonb_array_elements(coalesce(p_fuentes, '[]'::jsonb)) x
   where coalesce((x.value->>'cantidad')::numeric, 0) > 0;
 
-  if v_tipo_gasto in ('inversion_empresa', 'consumible') and abs(v_suma_fuentes - p_cantidad) > 0.01 then
+  if v_tipo_gasto in ('inversion_empresa') and abs(v_suma_fuentes - p_cantidad) > 0.01 then
     raise exception 'La suma de fuentes (%) no coincide con la cantidad del gasto (%)', v_suma_fuentes, p_cantidad;
   end if;
 

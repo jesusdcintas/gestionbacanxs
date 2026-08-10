@@ -112,7 +112,7 @@ export interface Database {
           concepto: string;
           cantidad: number;
           categoria: string;
-          tipo_gasto: 'directo_evento' | 'inversion_empresa' | 'consumible';
+          tipo_gasto: 'directo_evento' | 'inversion_empresa';
           fecha: string;
           evento_id: string | null;
           // Campo legado: mantener mientras exista en bases antiguas
@@ -127,7 +127,7 @@ export interface Database {
           concepto: string;
           cantidad: number;
           categoria: string;
-          tipo_gasto?: 'directo_evento' | 'inversion_empresa' | 'consumible';
+          tipo_gasto?: 'directo_evento' | 'inversion_empresa';
           fecha: string;
           evento_id?: string | null;
           pagado_por?: string | null;
@@ -141,7 +141,7 @@ export interface Database {
           concepto?: string;
           cantidad?: number;
           categoria?: string;
-          tipo_gasto?: 'directo_evento' | 'inversion_empresa' | 'consumible';
+          tipo_gasto?: 'directo_evento' | 'inversion_empresa';
           fecha?: string;
           evento_id?: string | null;
           pagado_por?: string | null;

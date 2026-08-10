@@ -7,7 +7,7 @@ import { getGastos } from '../../services/gastos';
 import { getProfiles } from '../../services/profiles';
 
 type Filtro = 'todos' | 'generales' | 'eventos';
-type TipoFiltro = 'todos' | 'directo_evento' | 'inversion_empresa' | 'consumible';
+type TipoFiltro = 'todos' | 'directo_evento' | 'inversion_empresa';
 
 const filtroRaw = Astro.url.searchParams.get('filtro') ?? 'todos';
 const filtro: Filtro = (['todos', 'generales', 'eventos'] as Filtro[]).includes(
@@ -18,7 +18,7 @@ const filtro: Filtro = (['todos', 'generales', 'eventos'] as Filtro[]).includes(
 
 const tipoRaw = Astro.url.searchParams.get('tipo') ?? 'todos';
 const tipoFiltro: TipoFiltro = (
-  ['todos', 'directo_evento', 'inversion_empresa', 'consumible'] as TipoFiltro[]
+  ['todos', 'directo_evento', 'inversion_empresa'] as TipoFiltro[]
 ).includes(tipoRaw as TipoFiltro)
   ? (tipoRaw as TipoFiltro)
   : 'todos';

@@ -164,7 +164,7 @@ export default function GastoForm({
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      tipo_gasto: e.target.value as 'directo_evento' | 'inversion_empresa' | 'consumible',
+                      tipo_gasto: e.target.value as 'directo_evento' | 'inversion_empresa',
                     })
                   }
                   required
@@ -172,7 +172,6 @@ export default function GastoForm({
                 >
                   <option value="directo_evento">Gasto del evento</option>
                   <option value="inversion_empresa">Inversión de empresa</option>
-                  <option value="consumible">Consumible</option>
                 </select>
               </div>
 
@@ -262,7 +261,7 @@ export default function GastoForm({
               </p>
             ) : requiereFuentesExactas ? (
               <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
-                En una inversión o consumible debes repartir el 100% entre socios y/o fondo.
+                En una inversión debes repartir el 100% entre socios y/o fondo.
               </p>
             ) : totalFuentes === 0 ? (
               <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>

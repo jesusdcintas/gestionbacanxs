@@ -19,7 +19,7 @@ if (Astro.request.method === 'POST') {
       concepto: formData.get('concepto')?.toString() || '',
       cantidad: parseFloat(formData.get('cantidad')?.toString() || '0'),
       categoria: formData.get('categoria')?.toString() || 'Otros',
-      tipo_gasto: (formData.get('tipo_gasto')?.toString() || (modoEvento ? 'directo_evento' : 'inversion_empresa')) as 'directo_evento' | 'inversion_empresa' | 'consumible',
+      tipo_gasto: (formData.get('tipo_gasto')?.toString() || (modoEvento ? 'directo_evento' : 'inversion_empresa')) as 'directo_evento' | 'inversion_empresa',
       fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
       evento_id: formData.has('evento_id') && formData.get('evento_id') ? formData.get('evento_id')!.toString() : null,
       reembolsado: formData.get('reembolsado') === 'on',

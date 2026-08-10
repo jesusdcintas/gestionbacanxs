@@ -17,7 +17,7 @@ type GastoEnriquecido = Gasto & {
 };
 
 type Filtro = 'todos' | 'generales' | 'eventos';
-type TipoFiltro = 'todos' | 'directo_evento' | 'inversion_empresa' | 'consumible';
+type TipoFiltro = 'todos' | 'directo_evento' | 'inversion_empresa';
 
 interface Props {
   todosIniciales: GastoEnriquecido[];
@@ -37,7 +37,6 @@ const tipoTabs: { value: TipoFiltro; label: string }[] = [
   { value: 'todos', label: 'Todos los tipos' },
   { value: 'directo_evento', label: 'Gasto del evento' },
   { value: 'inversion_empresa', label: 'Inversión de empresa' },
-  { value: 'consumible', label: 'Consumibles' },
 ];
 
 const sumar = (arr: { cantidad: number }[]) => arr.reduce((sum, gasto) => sum + Number(gasto.cantidad), 0);
@@ -49,7 +48,6 @@ export default function GastosDashboard({ todosIniciales, profiles, filtro, tipo
   const deEventos = useMemo(() => todos.filter((gasto) => gasto.evento_id !== null), [todos]);
   const directos = useMemo(() => todos.filter((gasto) => gasto.tipo_gasto === 'directo_evento'), [todos]);
   const inversiones = useMemo(() => todos.filter((gasto) => gasto.tipo_gasto === 'inversion_empresa'), [todos]);
-  const consumibles = useMemo(() => todos.filter((gasto) => gasto.tipo_gasto === 'consumible'), [todos]);
 
   const gastosBase = filtro === 'generales' ? generales : filtro === 'eventos' ? deEventos : todos;
   const gastos = tipoFiltro === 'todos' ? gastosBase : gastosBase.filter((gasto) => gasto.tipo_gasto === tipoFiltro);
@@ -64,7 +62,6 @@ export default function GastosDashboard({ todosIniciales, profiles, filtro, tipo
   const totalEventos = sumar(deEventos);
   const totalDirectos = sumar(directos);
   const totalInversiones = sumar(inversiones);
-  const totalConsumibles = sumar(consumibles);
 
   return (
     <div className="space-y-6">
@@ -129,8 +126,8 @@ export default function GastosDashboard({ todosIniciales, profiles, filtro, tipo
       <div className="flex flex-wrap gap-2">
         {tipoTabs.map((tab) => {
           const activo = tab.value === tipoFiltro;
-          const base = tab.value === 'todos' ? todos : tab.value === 'directo_evento' ? directos : tab.value === 'inversion_empresa' ? inversiones : consumibles;
-          const total = tab.value === 'todos' ? totalAll : tab.value === 'directo_evento' ? totalDirectos : tab.value === 'inversion_empresa' ? totalInversiones : totalConsumibles;
+          const base = tab.value === 'todos' ? todos : tab.value === 'directo_evento' ? directos : inversiones;
+          const total = tab.value === 'todos' ? totalAll : tab.value === 'directo_evento' ? totalDirectos : totalInversiones;
 
           return (
             <a

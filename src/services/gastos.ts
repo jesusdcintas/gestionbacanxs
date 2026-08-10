@@ -6,7 +6,7 @@ type Gasto = Database['public']['Tables']['gastos']['Row'];
 type GastoInsert = Database['public']['Tables']['gastos']['Insert'];
 type GastoUpdate = Database['public']['Tables']['gastos']['Update'];
 type GastoPago = Database['public']['Tables']['gasto_pagos']['Row'];
-export type TipoGasto = 'directo_evento' | 'inversion_empresa' | 'consumible';
+export type TipoGasto = 'directo_evento' | 'inversion_empresa';
 
 export interface FuentePagoInput {
   socio_id: string | null;
@@ -25,6 +25,7 @@ export const CATEGORIAS_GASTO = [
   'Equipamiento',
   'Promoción',
   'Servicios',
+  'Consumible',
   'Otros',
 ] as const;
 
@@ -90,7 +91,7 @@ export async function guardarGastoConPagos(
   const cantidadGasto = Number(gastoData.cantidad ?? 0);
   const tipoGasto = (gastoData.tipo_gasto ?? 'directo_evento') as TipoGasto;
   const eventoId = gastoData.evento_id ?? null;
-  const requiereFuentesExactas = tipoGasto === 'inversion_empresa' || tipoGasto === 'consumible';
+  const requiereFuentesExactas = tipoGasto === 'inversion_empresa';
 
   if (tipoGasto === 'directo_evento' && !eventoId) {
     throw new Error('Los gastos directos de evento deben estar vinculados a un evento.');

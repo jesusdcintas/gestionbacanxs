@@ -211,8 +211,8 @@ create table if not exists public.gastos (
   id uuid primary key default uuid_generate_v4(),
   concepto text not null,
   cantidad numeric(10,2) not null check (cantidad > 0),
-  categoria text not null,
-  tipo_gasto text not null default 'directo_evento' check (tipo_gasto in ('directo_evento', 'inversion_empresa', 'consumible')),
+  categoria text not null check (categoria in ('Transporte', 'Equipamiento', 'Alojamiento', 'Comida', 'Promoción', 'Servicios', 'Consumible', 'Otros')),
+  tipo_gasto text not null default 'directo_evento' check (tipo_gasto in ('directo_evento', 'inversion_empresa')),
   fecha date not null,
   evento_id uuid references public.eventos(id) on delete set null,
   pagado_por uuid references public.profiles(id),  -- null = pagado por la empresa
@@ -774,7 +774,7 @@ begin
 
   v_tipo_gasto := coalesce(nullif(trim(p_tipo_gasto), ''), 'directo_evento');
 
-  if v_tipo_gasto not in ('directo_evento', 'inversion_empresa', 'consumible') then
+  if v_tipo_gasto not in ('directo_evento', 'inversion_empresa') then
     raise exception 'Tipo de gasto no válido';
   end if;
 
@@ -782,7 +782,7 @@ begin
     raise exception 'Los gastos directos de evento deben tener evento_id';
   end if;
 
-  if v_tipo_gasto in ('inversion_empresa', 'consumible') and (p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0) then
+  if v_tipo_gasto in ('inversion_empresa') and (p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0) then
     raise exception 'Debes enviar al menos una fuente de pago';
   end if;
 
@@ -791,7 +791,7 @@ begin
   from jsonb_array_elements(coalesce(p_fuentes, '[]'::jsonb)) x
   where coalesce((x.value->>'cantidad')::numeric, 0) > 0;
 
-  if v_tipo_gasto in ('inversion_empresa', 'consumible') and abs(v_suma_fuentes - p_cantidad) > 0.01 then
+  if v_tipo_gasto in ('inversion_empresa') and abs(v_suma_fuentes - p_cantidad) > 0.01 then
     raise exception 'La suma de fuentes (%) no coincide con la cantidad del gasto (%)', v_suma_fuentes, p_cantidad;
   end if;
 

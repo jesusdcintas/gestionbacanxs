@@ -1,3 +1,40 @@
+begin;
+
+-- --------------------------------------------------------------------------
+-- PREVIEW (ejecutar antes de aplicar esta migracion)
+-- --------------------------------------------------------------------------
+-- select concepto, cantidad, evento_id, categoria as categoria_actual
+-- from public.gastos
+-- where tipo_gasto = 'consumible'
+-- order by fecha desc, created_at desc;
+
+-- --------------------------------------------------------------------------
+-- 1) categoria: agregar 'Consumible'
+-- --------------------------------------------------------------------------
+alter table public.gastos drop constraint if exists gastos_categoria_check;
+alter table public.gastos add constraint gastos_categoria_check
+  check (categoria in ('Transporte', 'Equipamiento', 'Alojamiento', 'Comida', 'Promoción', 'Servicios', 'Consumible', 'Otros'));
+
+-- --------------------------------------------------------------------------
+-- 2) Migracion de datos: consumible pasa a categoria
+-- --------------------------------------------------------------------------
+update public.gastos
+set
+  categoria = 'Consumible',
+  tipo_gasto = 'inversion_empresa',
+  updated_at = now()
+where tipo_gasto = 'consumible';
+
+-- --------------------------------------------------------------------------
+-- 3) tipo_gasto: volver a dos valores
+-- --------------------------------------------------------------------------
+alter table public.gastos drop constraint if exists gastos_tipo_gasto_check;
+alter table public.gastos add constraint gastos_tipo_gasto_check
+  check (tipo_gasto in ('directo_evento', 'inversion_empresa'));
+
+-- --------------------------------------------------------------------------
+-- 4) RPC guardar_gasto_con_pagos: validaciones sin consumible en tipo_gasto
+-- --------------------------------------------------------------------------
 create or replace function public.guardar_gasto_con_pagos(
   p_gasto_id uuid,
   p_concepto text,
@@ -126,18 +163,4 @@ begin
 end;
 $$;
 
-insert into public.fondo_movimientos (fecha, concepto, cantidad, evento_id, gasto_id)
-select
-  '2026-05-12'::date,
-  'Thomann sub + conectores xlr y jack',
-  -400.00,
-  null,
-  '312a99fe-4dce-4900-a1d1-e72780ec775b'::uuid
-where not exists (
-  select 1
-  from public.fondo_movimientos fm
-  where fm.gasto_id = '312a99fe-4dce-4900-a1d1-e72780ec775b'::uuid
-    and fm.fecha = '2026-05-12'::date
-    and fm.cantidad = -400.00
-    and fm.concepto = 'Thomann sub + conectores xlr y jack'
-);
+commit;
