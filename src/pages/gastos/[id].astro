@@ -8,6 +8,51 @@ import { getProfiles } from '../../services/profiles';
 const { id } = Astro.params;
 const returnToRaw = Astro.url.searchParams.get('return_to') ?? '/gastos';
 const returnTo = returnToRaw.startsWith('/') ? returnToRaw : '/gastos';
+const visibleRaw = Astro.url.searchParams.get('visible_gastos') ?? '';
+
+const visibleFromReturnTo = (() => {
+  try {
+    const parsed = new URL(returnTo, 'http://local');
+    return parsed.searchParams.get('visible_gastos') ?? '';
+  } catch {
+    return '';
+  }
+})();
+
+const visibleGastosIds = (visibleRaw || visibleFromReturnTo)
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+
+const buildReturnToFor = (targetId: string) => {
+  try {
+    const parsed = new URL(returnTo, 'http://local');
+    parsed.searchParams.set('open_gasto', targetId);
+    if (visibleGastosIds.length > 0) {
+      parsed.searchParams.set('visible_gastos', visibleGastosIds.join(','));
+    }
+    const qs = parsed.searchParams.toString();
+    return `${parsed.pathname}${qs ? `?${qs}` : ''}`;
+  } catch {
+    return returnTo;
+  }
+};
+
+const currentReturnTo = buildReturnToFor(id ?? '');
+const currentIndex = id ? visibleGastosIds.indexOf(id) : -1;
+const gastoAnteriorId = currentIndex > 0 ? visibleGastosIds[currentIndex - 1] : null;
+const gastoSiguienteId = currentIndex >= 0 && currentIndex < visibleGastosIds.length - 1
+  ? visibleGastosIds[currentIndex + 1]
+  : null;
+
+const buildEditHref = (targetId: string) => {
+  const search = new URLSearchParams();
+  search.set('return_to', buildReturnToFor(targetId));
+  if (visibleGastosIds.length > 0) {
+    search.set('visible_gastos', visibleGastosIds.join(','));
+  }
+  return `/gastos/${targetId}?${search.toString()}`;
+};
 
 if (!id) {
   return Astro.redirect('/gastos');
@@ -28,7 +73,7 @@ const profiles = await getProfiles(Astro);
 if (Astro.request.method === 'POST') {
   try {
     const formData = await Astro.request.formData();
-    const formReturnToRaw = formData.get('return_to')?.toString() ?? returnTo;
+    const formReturnToRaw = formData.get('return_to')?.toString() ?? currentReturnTo;
     const formReturnTo = formReturnToRaw.startsWith('/') ? formReturnToRaw : '/gastos';
     const formaPago = formData.get('forma_pago')?.toString().trim() || null;
     const tipoFactura = formData.get('tipo_factura')?.toString().trim() || null;
@@ -72,7 +117,7 @@ if (Astro.request.method === 'POST') {
     console.error('Error updating gasto:', error);
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
     return new Response(
-      `<html><body><h1>Error al actualizar gasto</h1><pre>${errorMessage}</pre><a href="/gastos/${id}?return_to=${encodeURIComponent(returnTo)}">Volver</a></body></html>`,
+      `<html><body><h1>Error al actualizar gasto</h1><pre>${errorMessage}</pre><a href="/gastos/${id}?return_to=${encodeURIComponent(currentReturnTo)}">Volver</a></body></html>`,
       { status: 500, headers: { 'Content-Type': 'text/html' } }
     );
   }
@@ -81,11 +126,35 @@ if (Astro.request.method === 'POST') {
 
 <AppLayout title={`Editar ${gasto.concepto}`}>
   <div class="max-w-3xl mx-auto space-y-6">
-    <div>
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div>
       <h1 class="text-3xl uppercase italic" style="font-family: 'Archivo Black', sans-serif;">Editar gasto</h1>
       <p class="text-text-secondary mt-1">Modifica los detalles del gasto</p>
+      </div>
+      {visibleGastosIds.length > 1 && (
+        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {gastoAnteriorId ? (
+            <a href={buildEditHref(gastoAnteriorId)} class="inline-flex h-10 items-center justify-center rounded-xs border border-border-strong bg-transparent px-4 text-sm text-text-primary transition-colors duration-150 hover:border-text-primary/40 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]">
+              ← Gasto anterior
+            </a>
+          ) : (
+            <span class="inline-flex h-10 cursor-not-allowed items-center justify-center rounded-xs border border-border px-4 text-sm text-text-secondary opacity-50">
+              ← Gasto anterior
+            </span>
+          )}
+          {gastoSiguienteId ? (
+            <a href={buildEditHref(gastoSiguienteId)} class="inline-flex h-10 items-center justify-center rounded-xs border border-border-strong bg-transparent px-4 text-sm text-text-primary transition-colors duration-150 hover:border-text-primary/40 hover:bg-surface-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a0a]">
+              Gasto siguiente →
+            </a>
+          ) : (
+            <span class="inline-flex h-10 cursor-not-allowed items-center justify-center rounded-xs border border-border px-4 text-sm text-text-secondary opacity-50">
+              Gasto siguiente →
+            </span>
+          )}
+        </div>
+      )}
     </div>
 
-    <GastoForm gasto={gasto} eventos={eventos} profiles={profiles} cancelTo={returnTo} client:load />
+    <GastoForm gasto={gasto} eventos={eventos} profiles={profiles} cancelTo={currentReturnTo} client:load />
   </div>
 </AppLayout>

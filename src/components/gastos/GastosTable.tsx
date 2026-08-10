@@ -140,6 +140,7 @@ export default function GastosTable({
 
     const editUrl = new URL(`${editBasePath}/${id}`, window.location.origin);
     editUrl.searchParams.set('return_to', `${returnUrl.pathname}${returnUrl.search}`);
+    editUrl.searchParams.set('visible_gastos', visibleIds.join(','));
 
     window.location.href = `${editUrl.pathname}${editUrl.search}`;
   };

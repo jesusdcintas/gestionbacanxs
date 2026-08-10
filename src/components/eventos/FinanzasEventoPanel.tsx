@@ -103,6 +103,7 @@ export default function FinanzasEventoPanel({
 
     const editUrl = new URL(`/gastos/${id}`, window.location.origin);
     editUrl.searchParams.set('return_to', `${returnUrl.pathname}${returnUrl.search}`);
+    editUrl.searchParams.set('visible_gastos', visibleIds.join(','));
     window.location.href = `${editUrl.pathname}${editUrl.search}`;
   };
 
