@@ -55,6 +55,9 @@ export default function GastoForm({
   };
 
   const [fuentes, setFuentes] = useState<Record<string, string>>(() => buildFuentesFromGasto());
+  const [facturaPreviewUrl, setFacturaPreviewUrl] = useState<string | null>(null);
+  const [facturaPreviewError, setFacturaPreviewError] = useState<string | null>(null);
+  const [facturaLoading, setFacturaLoading] = useState(false);
 
   useEffect(() => {
     setFormData({
@@ -69,7 +72,38 @@ export default function GastoForm({
       reembolsado: Boolean(gasto?.reembolsado),
     });
     setFuentes(buildFuentesFromGasto());
+    setFacturaPreviewUrl(null);
+    setFacturaPreviewError(null);
+    setFacturaLoading(false);
   }, [gasto, defaultEventoId, modoEvento, profiles]);
+
+  const cargarFacturaActual = async () => {
+    if (!gasto?.id || !gasto.factura_path) return;
+
+    setFacturaLoading(true);
+    setFacturaPreviewError(null);
+
+    try {
+      const response = await fetch(`/api/gastos/${gasto.id}/factura-url`);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || 'No se pudo cargar la factura');
+      }
+
+      const payload = await response.json();
+      if (!payload?.url) {
+        throw new Error('No se recibió URL temporal para la factura');
+      }
+
+      setFacturaPreviewUrl(payload.url);
+    } catch (error) {
+      setFacturaPreviewError(error instanceof Error ? error.message : 'No se pudo cargar la factura');
+    } finally {
+      setFacturaLoading(false);
+    }
+  };
+
+  const esFacturaPdf = Boolean(gasto?.factura_path?.toLowerCase().endsWith('.pdf'));
 
   const cantidadGasto = Number(formData.cantidad) || 0;
   const totalFuentes = useMemo(
@@ -290,7 +324,50 @@ export default function GastoForm({
               className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary file:mr-3 file:border-0 file:bg-accent file:px-3 file:py-1 file:text-xs file:font-semibold file:text-accent-ink"
             />
             {gasto?.factura_path && (
-              <p className="mt-2 text-xs text-text-secondary">Ya hay una factura adjunta. Si subes otra, reemplazará la actual.</p>
+              <div className="mt-3 space-y-3 border border-border bg-[#0a0a0a] p-3">
+                <p className="text-xs text-text-secondary">Ya hay una factura adjunta. Si subes otra, reemplazará la actual.</p>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      void cargarFacturaActual();
+                    }}
+                    isLoading={facturaLoading}
+                  >
+                    Ver factura actual
+                  </Button>
+
+                  {facturaPreviewUrl && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => window.open(facturaPreviewUrl, '_blank', 'noopener,noreferrer')}
+                    >
+                      Abrir en pestaña nueva
+                    </Button>
+                  )}
+                </div>
+
+                {facturaPreviewError && <p className="text-xs text-danger">{facturaPreviewError}</p>}
+
+                {facturaPreviewUrl && (
+                  <div className="border border-border bg-black/30 p-2">
+                    {esFacturaPdf ? (
+                      <iframe
+                        title="Previsualización de factura"
+                        src={facturaPreviewUrl}
+                        className="h-105 w-full"
+                      />
+                    ) : (
+                      <img src={facturaPreviewUrl} alt="Factura adjunta" className="max-h-130 w-full object-contain" />
+                    )}
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
