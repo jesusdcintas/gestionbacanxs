@@ -6,6 +6,7 @@ import MonthlyChart from '../components/balance/MonthlyChart.tsx';
 import CategoryChart from '../components/balance/CategoryChart.tsx';
 import BalanceSociosTable from '../components/balance/BalanceSociosTable.tsx';
 import BalanceLiquidacionPanel from '../components/balance/BalanceLiquidacionPanel.tsx';
+import BalancePeriodoPanel from '../components/balance/BalancePeriodoPanel.tsx';
 import {
   getBalanceData,
   getCategoryData,
@@ -14,20 +15,14 @@ import {
   getPendientesDetallePorSocio,
 } from '../services/balance';
 
-const [monthlyData, categoryData, balanceSocios, repartosDetallePorSocio, pendientesDetallePorSocio] = await Promise.all([
+const [monthlyDataAll, monthlyData6m, categoryData, balanceSocios, repartosDetallePorSocio, pendientesDetallePorSocio] = await Promise.all([
+  getBalanceData(Astro),
   getBalanceData(Astro, 6),
   getCategoryData(Astro),
   getBalanceSocios(Astro),
   getRepartosDetallePorSocio(Astro),
   getPendientesDetallePorSocio(Astro),
 ]);
-
-const totalIngresos = monthlyData.reduce((sum, m) => sum + m.ingresos, 0);
-const totalGastos = monthlyData.reduce((sum, m) => sum + m.gastos, 0);
-const beneficio = totalIngresos - totalGastos;
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
 ---
 
 <AppLayout title="Balance">
@@ -46,36 +41,7 @@ const formatCurrency = (value: number) =>
       </p>
     </div>
 
-    <!-- Métricas globales 6 meses -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div class="border border-border bg-surface p-5">
-        <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Ingresos (6m)</p>
-        <p
-          class="mt-2 text-2xl font-semibold text-text-primary"
-          style="font-family: 'JetBrains Mono', monospace;"
-        >
-          {formatCurrency(totalIngresos)}
-        </p>
-      </div>
-      <div class="border border-border bg-surface p-5">
-        <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Gastos (6m)</p>
-        <p
-          class="mt-2 text-2xl font-semibold text-danger"
-          style="font-family: 'JetBrains Mono', monospace;"
-        >
-          −{formatCurrency(totalGastos)}
-        </p>
-      </div>
-      <div class="border border-border bg-surface p-5">
-        <p class="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Beneficio (6m)</p>
-        <p
-          class={`mt-2 text-2xl font-semibold ${beneficio >= 0 ? 'text-accent' : 'text-danger'}`}
-          style="font-family: 'JetBrains Mono', monospace;"
-        >
-          {beneficio >= 0 ? '+' : '−'}{formatCurrency(Math.abs(beneficio))}
-        </p>
-      </div>
-    </div>
+    <BalancePeriodoPanel monthlyData={monthlyDataAll} client:load />
 
     <!-- Balance entre socios -->
     <div class="space-y-4">
@@ -124,7 +90,7 @@ const formatCurrency = (value: number) =>
           <CardTitle>Ingresos vs gastos · Últimos 6 meses</CardTitle>
         </CardHeader>
         <CardContent>
-          <MonthlyChart data={monthlyData} client:load />
+          <MonthlyChart data={monthlyData6m} client:load />
         </CardContent>
       </Card>
 

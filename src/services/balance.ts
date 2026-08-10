@@ -397,17 +397,21 @@ export interface BalanceMonthData {
 
 export async function getBalanceData(
   context: APIContext,
-  meses: number = 6
+  meses?: number | null,
 ): Promise<BalanceMonthData[]> {
   const supabase = getSupabaseServerClient(context);
 
+  const useRange = typeof meses === 'number' && meses > 0;
   const now = new Date();
-  const desde = new Date(now.getFullYear(), now.getMonth() - (meses - 1), 1);
-  const desdeIso = desde.toISOString().split('T')[0];
+  const desde = useRange ? new Date(now.getFullYear(), now.getMonth() - (meses - 1), 1) : null;
+  const desdeIso = desde ? desde.toISOString().split('T')[0] : null;
+
+  const ingresosQuery = supabase.from('pagos_evento').select('cantidad, fecha');
+  const gastosQuery = supabase.from('gastos').select('cantidad, fecha');
 
   const [ingresosRes, gastosRes] = await Promise.all([
-    supabase.from('pagos_evento').select('cantidad, fecha').gte('fecha', desdeIso),
-    supabase.from('gastos').select('cantidad, fecha').gte('fecha', desdeIso),
+    desdeIso ? ingresosQuery.gte('fecha', desdeIso) : ingresosQuery,
+    desdeIso ? gastosQuery.gte('fecha', desdeIso) : gastosQuery,
   ]);
 
   if (ingresosRes.error || gastosRes.error) {
@@ -416,24 +420,29 @@ export async function getBalanceData(
   }
 
   const buckets = new Map<string, BalanceMonthData>();
-  for (let i = 0; i < meses; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - (meses - 1) + i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    buckets.set(key, { mes: key, ingresos: 0, gastos: 0, beneficio: 0 });
+
+  if (useRange) {
+    for (let i = 0; i < (meses as number); i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - ((meses as number) - 1) + i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      buckets.set(key, { mes: key, ingresos: 0, gastos: 0, beneficio: 0 });
+    }
   }
 
   for (const ing of ingresosRes.data ?? []) {
     const d = new Date(ing.fecha);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const bucket = buckets.get(key);
-    if (bucket) bucket.ingresos += Number(ing.cantidad);
+    const bucket = buckets.get(key) ?? { mes: key, ingresos: 0, gastos: 0, beneficio: 0 };
+    bucket.ingresos += Number(ing.cantidad);
+    buckets.set(key, bucket);
   }
 
   for (const g of gastosRes.data ?? []) {
     const d = new Date(g.fecha);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const bucket = buckets.get(key);
-    if (bucket) bucket.gastos += Number(g.cantidad);
+    const bucket = buckets.get(key) ?? { mes: key, ingresos: 0, gastos: 0, beneficio: 0 };
+    bucket.gastos += Number(g.cantidad);
+    buckets.set(key, bucket);
   }
 
   return Array.from(buckets.values())
