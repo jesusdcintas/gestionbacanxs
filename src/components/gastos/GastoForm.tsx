@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Card } from '../ui/Card';
@@ -43,7 +43,7 @@ export default function GastoForm({
     reembolsado: Boolean(gasto?.reembolsado),
   });
 
-  const [fuentes, setFuentes] = useState<Record<string, string>>(() => {
+  const buildFuentesFromGasto = () => {
     const initial: Record<string, string> = {};
     for (const p of profiles) {
       const pago = gasto?.gasto_pagos?.find((gp) => gp.socio_id === p.id);
@@ -52,7 +52,24 @@ export default function GastoForm({
     const pagoFondo = gasto?.gasto_pagos?.find((gp) => gp.socio_id === null);
     initial.fondo = pagoFondo ? String(Number(pagoFondo.cantidad)) : '0';
     return initial;
-  });
+  };
+
+  const [fuentes, setFuentes] = useState<Record<string, string>>(() => buildFuentesFromGasto());
+
+  useEffect(() => {
+    setFormData({
+      concepto: gasto?.concepto || '',
+      cantidad: gasto?.cantidad?.toString() || '',
+      categoria: gasto?.categoria || 'Otros',
+      tipo_gasto: gasto?.tipo_gasto || (modoEvento ? 'directo_evento' : 'inversion_empresa'),
+      fecha: gasto?.fecha || new Date().toISOString().split('T')[0],
+      evento_id: gasto?.evento_id || defaultEventoId || '',
+      forma_pago: gasto?.forma_pago || '',
+      tipo_factura: gasto?.tipo_factura || '',
+      reembolsado: Boolean(gasto?.reembolsado),
+    });
+    setFuentes(buildFuentesFromGasto());
+  }, [gasto, defaultEventoId, modoEvento, profiles]);
 
   const cantidadGasto = Number(formData.cantidad) || 0;
   const totalFuentes = useMemo(
