@@ -364,16 +364,7 @@ export default function GastosTable({
                   <td className="px-4 py-3 text-sm text-text-secondary" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                     {formatDate(gasto.fecha)}
                   </td>
-                  <td className="px-4 py-3 text-sm text-text-secondary">
-                    <div className="flex items-center gap-2">
-                      <span>{gasto.categoria || 'Otros'}</span>
-                      {gasto.categoria === 'Consumible' && (
-                        <StampLabel rotate="none" variant="consumible">
-                          Consumible
-                        </StampLabel>
-                      )}
-                    </div>
-                  </td>
+                  <td className="px-4 py-3 text-sm text-text-secondary">{gasto.categoria || 'Otros'}</td>
                   <td className="px-4 py-3 text-sm">
                     {gasto.tipo_gasto === 'inversion_empresa' ? (
                       <StampLabel rotate="none" variant="accent">
