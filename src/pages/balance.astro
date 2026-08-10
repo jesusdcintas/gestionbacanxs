@@ -23,6 +23,9 @@ const [monthlyDataAll, monthlyData6m, categoryData, balanceSocios, repartosDetal
   getRepartosDetallePorSocio(Astro),
   getPendientesDetallePorSocio(Astro),
 ]);
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value);
 ---
 
 <AppLayout title="Balance">
