@@ -77,6 +77,7 @@ if (Astro.request.method === 'POST') {
     const formReturnTo = formReturnToRaw.startsWith('/') ? formReturnToRaw : '/gastos';
     const formaPago = formData.get('forma_pago')?.toString().trim() || null;
     const tipoFactura = formData.get('tipo_factura')?.toString().trim() || null;
+    const pagado = formData.get('pagado') !== 'false';
     const facturaRaw = formData.get('factura');
     const facturaFile = facturaRaw instanceof File && facturaRaw.size > 0 ? facturaRaw : null;
     
@@ -90,6 +91,7 @@ if (Astro.request.method === 'POST') {
       forma_pago: formaPago as 'tarjeta' | 'transferencia' | 'efectivo' | null,
       tipo_factura: tipoFactura as 'A' | 'B' | null,
       factura_path: gasto.factura_path,
+      pagado,
       reembolsado: formData.get('reembolsado') === 'on',
     };
 

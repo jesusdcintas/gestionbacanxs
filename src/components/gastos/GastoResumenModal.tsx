@@ -156,9 +156,26 @@ export default function GastoResumenModal({
                 <StampLabel rotate="none" variant="outline">Evento</StampLabel>
               )}
             </div>
+            <div className="flex items-center gap-2 text-sm text-text-secondary">
+              <span>Estado:</span>
+              {current.pagado ? (
+                <StampLabel rotate="none" variant="accent">Pagado</StampLabel>
+              ) : (
+                <StampLabel rotate="none" variant="outline">Previsto</StampLabel>
+              )}
+            </div>
             <p className="text-sm text-text-secondary">Forma de pago: <span className="text-text-primary">{labelFormaPago(current.forma_pago)}</span></p>
             <p className="text-sm text-text-secondary">¿Tiene factura?: <span className="text-text-primary">{labelTipoFactura(current.tipo_factura)}</span></p>
-            <p className="text-sm text-text-secondary">Estado: {current.reembolsado ? <span className="text-accent">Reembolsado</span> : <span className="text-danger">Pendiente</span>}</p>
+            <p className="text-sm text-text-secondary">
+              Reembolso:{' '}
+              {!current.pagado ? (
+                <span className="text-text-secondary">No aplica (previsto)</span>
+              ) : current.reembolsado ? (
+                <span className="text-accent">Reembolsado</span>
+              ) : (
+                <span className="text-danger">Pendiente</span>
+              )}
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -175,7 +192,9 @@ export default function GastoResumenModal({
 
             <div>
               <p className="text-[11px] uppercase tracking-[0.08em] text-text-secondary">Desglose de pago</p>
-              {fuentes.length === 0 ? (
+              {!current.pagado ? (
+                <p className="mt-1 text-sm text-text-primary">Gasto previsto: aún no tiene desembolso registrado.</p>
+              ) : fuentes.length === 0 ? (
                 <p className="mt-1 text-sm text-text-primary">{current.tipo_gasto === 'directo_evento' ? 'Pagado del cobro del evento' : 'Sin fuentes registradas'}</p>
               ) : (
                 <ul className="mt-1 space-y-1">

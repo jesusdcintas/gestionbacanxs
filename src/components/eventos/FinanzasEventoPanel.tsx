@@ -65,14 +65,21 @@ export default function FinanzasEventoPanel({
   initialVisibleGastosIds = [],
 }: Props) {
   const [gastos, setGastos] = useState(gastosIniciales);
-  const [totalGastos, setTotalGastos] = useState(totalGastosInicial);
   const [deleteRow, setDeleteRow] = useState<GastoEvento | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [resumenOpen, setResumenOpen] = useState(false);
   const [activeGastoId, setActiveGastoId] = useState<string | null>(null);
 
-  const netoRepartible = useMemo(() => ingresoNeto - totalGastos, [ingresoNeto, totalGastos]);
+  const totalGastosPagados = useMemo(
+    () => gastos.filter((gasto) => gasto.pagado).reduce((sum, gasto) => sum + Number(gasto.cantidad), 0),
+    [gastos],
+  );
+  const totalGastosPrevistos = useMemo(
+    () => gastos.filter((gasto) => !gasto.pagado).reduce((sum, gasto) => sum + Number(gasto.cantidad), 0),
+    [gastos],
+  );
+  const netoRepartible = useMemo(() => ingresoNeto - totalGastosPagados, [ingresoNeto, totalGastosPagados]);
   const orderedIds = useMemo(() => gastos.map((gasto) => gasto.id), [gastos]);
 
   useEffect(() => {
@@ -134,9 +141,7 @@ export default function FinanzasEventoPanel({
         throw new Error(payload?.error || 'No se pudo eliminar el gasto');
       }
 
-      const amount = Number(deleteRow.cantidad);
       setGastos((current) => current.filter((gasto) => gasto.id !== deleteRow.id));
-      setTotalGastos((current) => current - amount);
       setDeleteRow(null);
     } catch (error) {
       setDeleteError(error instanceof Error ? error.message : 'No se pudo eliminar el gasto');
@@ -185,8 +190,11 @@ export default function FinanzasEventoPanel({
             </p>
           </div>
           <div className="p-4 bg-[#0a0a0a] border border-border">
-            <p className="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Gastos</p>
-            <p className="text-2xl font-bold text-danger" style={{ fontFamily: '"JetBrains Mono", monospace' }}>−{totalGastos.toFixed(2)} €</p>
+            <p className="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Gastos pagados</p>
+            <p className="text-2xl font-bold text-danger" style={{ fontFamily: '"JetBrains Mono", monospace' }}>−{totalGastosPagados.toFixed(2)} €</p>
+            {totalGastosInicial !== totalGastosPagados ? (
+              <p className="text-xs text-text-secondary mt-1">Sincronizado desde lista local de gastos</p>
+            ) : null}
           </div>
           <div className="p-4 bg-[#0a0a0a] border border-border">
             <p className="text-[11px] uppercase tracking-[0.08em] text-text-secondary mb-1">Neto repartible</p>
@@ -202,7 +210,10 @@ export default function FinanzasEventoPanel({
           <div>
             <StampLabel rotate="left">Gastos del evento</StampLabel>
             <p className="mt-2 text-sm text-text-secondary">
-              Total: <span className="font-semibold text-danger" style={{ fontFamily: '"JetBrains Mono", monospace' }}>−{formatCurrency(totalGastos)} €</span>
+              Total pagado: <span className="font-semibold text-danger" style={{ fontFamily: '"JetBrains Mono", monospace' }}>−{formatCurrency(totalGastosPagados)} €</span>
+            </p>
+            <p className="mt-1 text-sm text-text-secondary">
+              Total previsto (no incluido en neto): <span className="font-semibold text-text-primary" style={{ fontFamily: '"JetBrains Mono", monospace' }}>−{formatCurrency(totalGastosPrevistos)} €</span>
             </p>
           </div>
           <a
@@ -220,7 +231,9 @@ export default function FinanzasEventoPanel({
             {gastos.map((gasto) => (
               <div
                 key={gasto.id}
-                className="flex cursor-pointer items-center justify-between gap-4 border border-border bg-[#0a0a0a] p-3 transition-colors hover:border-border-strong"
+                className={`flex cursor-pointer items-center justify-between gap-4 border bg-[#0a0a0a] p-3 transition-colors hover:border-border-strong ${
+                  gasto.pagado ? 'border-border' : 'border-border-strong border-dashed opacity-85'
+                }`}
                 role="button"
                 tabIndex={0}
                 onClick={() => {
@@ -238,6 +251,11 @@ export default function FinanzasEventoPanel({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-3">
                     <p className="font-medium text-text-primary">{gasto.concepto}</p>
+                    {gasto.pagado ? (
+                      <StampLabel rotate="none" variant="accent">Pagado</StampLabel>
+                    ) : (
+                      <StampLabel rotate="none" variant="outline">Previsto</StampLabel>
+                    )}
                     {gasto.reembolsado ? <StampLabel rotate="none" variant="accent">Reembolsado</StampLabel> : null}
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-3">
@@ -245,7 +263,9 @@ export default function FinanzasEventoPanel({
                       {formatDate(gasto.fecha)}
                     </span>
                     <span className="text-[11px] uppercase tracking-[0.08em] text-text-secondary">{gasto.categoria}</span>
-                    <span className="text-[11px] uppercase tracking-[0.08em] text-text-primary">Pagado con: {fuentesTexto(gasto)}</span>
+                    <span className="text-[11px] uppercase tracking-[0.08em] text-text-primary">
+                      {gasto.pagado ? `Pagado con: ${fuentesTexto(gasto)}` : 'No desembolsado todavía'}
+                    </span>
                   </div>
                 </div>
 

@@ -151,6 +151,7 @@ export async function guardarGastoConPagos(
   const tipoGasto = (gastoData.tipo_gasto ?? 'directo_evento') as TipoGasto;
   const eventoId = gastoData.evento_id ?? null;
   const requiereFuentesExactas = tipoGasto === 'inversion_empresa';
+  const gastoPagado = Boolean(gastoData.pagado ?? true);
   const formaPago = (gastoData.forma_pago ?? null) as FormaPagoGasto | null;
   const tipoFactura = (gastoData.tipo_factura ?? null) as TipoFacturaGasto | null;
   const facturaPath = gastoData.factura_path ?? null;
@@ -159,11 +160,11 @@ export async function guardarGastoConPagos(
     throw new Error('Los gastos directos de evento deben estar vinculados a un evento.');
   }
 
-  if (requiereFuentesExactas && fuentes.length === 0) {
+  if (gastoPagado && requiereFuentesExactas && fuentes.length === 0) {
     throw new Error('Debes indicar al menos una fuente de pago con cantidad mayor a 0');
   }
 
-  if (requiereFuentesExactas && Math.abs(totalFuentes - cantidadGasto) > 0.01) {
+  if (gastoPagado && requiereFuentesExactas && Math.abs(totalFuentes - cantidadGasto) > 0.01) {
     throw new Error(
       `Las fuentes de pago (${totalFuentes.toFixed(2)}€) no coinciden con la cantidad del gasto (${cantidadGasto.toFixed(2)}€).`,
     );
@@ -178,6 +179,7 @@ export async function guardarGastoConPagos(
     p_fecha: String(gastoData.fecha || new Date().toISOString().slice(0, 10)),
     p_evento_id: eventoId,
     p_reembolsado: Boolean(gastoData.reembolsado ?? false),
+    p_pagado: gastoPagado,
     p_forma_pago: formaPago,
     p_tipo_factura: tipoFactura,
     p_factura_path: facturaPath,
@@ -411,8 +413,21 @@ export async function getGastosPendientesReembolso(context: APIContext) {
 }
 
 export async function getTotalGastosEvento(context: APIContext, eventoId: string): Promise<number> {
-  const gastos = await getGastosByEvento(context, eventoId);
-  return gastos.reduce((total, gasto) => total + Number(gasto.cantidad), 0);
+  const supabase = getSupabaseServerClient(context);
+
+  const { data, error } = await supabase
+    .from('gastos')
+    .select('cantidad')
+    .eq('evento_id', eventoId)
+    .eq('tipo_gasto', 'directo_evento')
+    .eq('pagado', true);
+
+  if (error) {
+    console.error('Error fetching total gastos evento:', error);
+    throw new Error('No se pudo calcular el total de gastos del evento');
+  }
+
+  return (data ?? []).reduce((total, gasto) => total + Number(gasto.cantidad), 0);
 }
 
 export async function cambiarPagadorMasivo(

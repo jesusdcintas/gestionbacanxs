@@ -42,6 +42,7 @@ export default function GastoForm({
     evento_id: gasto?.evento_id || defaultEventoId || '',
     forma_pago: gasto?.forma_pago || '',
     tipo_factura: gasto?.tipo_factura || '',
+    pagado: gasto?.pagado ?? true,
     reembolsado: Boolean(gasto?.reembolsado),
   });
 
@@ -71,6 +72,7 @@ export default function GastoForm({
       evento_id: gasto?.evento_id || defaultEventoId || '',
       forma_pago: gasto?.forma_pago || '',
       tipo_factura: gasto?.tipo_factura || '',
+      pagado: gasto?.pagado ?? true,
       reembolsado: Boolean(gasto?.reembolsado),
     });
     setFuentes(buildFuentesFromGasto());
@@ -114,8 +116,11 @@ export default function GastoForm({
   );
   const diferencia = cantidadGasto - totalFuentes;
   const cuadra = Math.abs(diferencia) < 0.01;
+  const esDirectoEvento = formData.tipo_gasto === 'directo_evento';
+  const esPrevisto = esDirectoEvento && !formData.pagado;
+  const mostrarCamposPago = !esPrevisto;
   const requiereEvento = formData.tipo_gasto === 'directo_evento';
-  const requiereFuentesExactas = formData.tipo_gasto !== 'directo_evento';
+  const requiereFuentesExactas = formData.tipo_gasto !== 'directo_evento' && formData.pagado;
   const eventoValido = !requiereEvento || Boolean(formData.evento_id);
   const puedeEnviar = eventoValido && (!requiereFuentesExactas || (totalFuentes > 0 && cuadra));
   const mostrarAvisoFuentes = requiereFuentesExactas && !cuadra;
@@ -134,6 +139,7 @@ export default function GastoForm({
     <Card>
       <form method="POST" encType="multipart/form-data" className="space-y-6" onSubmit={onSubmit}>
         <input type="hidden" name="return_to" value={cancelTo} />
+        <input type="hidden" name="pagado" value={formData.pagado ? 'true' : 'false'} />
         <div>
           <h2 className="text-xl font-semibold mb-4">{gasto ? 'Editar Gasto' : 'Nuevo Gasto'}</h2>
         </div>
@@ -221,6 +227,7 @@ export default function GastoForm({
                     setFormData({
                       ...formData,
                       tipo_gasto: e.target.value as 'directo_evento' | 'inversion_empresa',
+                      pagado: e.target.value === 'inversion_empresa' ? true : formData.pagado,
                     })
                   }
                   required
@@ -253,22 +260,73 @@ export default function GastoForm({
             </>
           )}
 
-          <div>
-            <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
-              Forma de pago (opcional)
-            </label>
-            <select
-              name="forma_pago"
-              value={formData.forma_pago}
-              onChange={(e) => setFormData({ ...formData, forma_pago: e.target.value })}
-              className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            >
-              <option value="">Sin especificar</option>
-              <option value="tarjeta">Tarjeta</option>
-              <option value="transferencia">Transferencia</option>
-              <option value="efectivo">Efectivo</option>
-            </select>
-          </div>
+          {esDirectoEvento && (
+            <div className="md:col-span-2">
+              <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
+                Estado del gasto
+              </label>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, pagado: true })}
+                  className={`border px-3 py-2 text-left transition-colors ${
+                    formData.pagado
+                      ? 'border-accent bg-accent/10 text-text-primary'
+                      : 'border-border bg-[#0a0a0a] text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  <span className="block text-sm font-semibold">Pagado</span>
+                  <span className="block text-[11px] uppercase tracking-[0.08em] text-text-secondary">ya desembolsado</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, pagado: false, reembolsado: false })}
+                  className={`border px-3 py-2 text-left transition-colors ${
+                    !formData.pagado
+                      ? 'border-accent bg-accent/10 text-text-primary'
+                      : 'border-border bg-[#0a0a0a] text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  <span className="block text-sm font-semibold">Previsto</span>
+                  <span className="block text-[11px] uppercase tracking-[0.08em] text-text-secondary">aún no pagado</span>
+                </button>
+              </div>
+              {!formData.pagado ? (
+                <p className="mt-2 text-xs text-text-secondary">
+                  Los gastos previstos no descuentan del neto repartible hasta marcarlos como pagados.
+                </p>
+              ) : null}
+            </div>
+          )}
+
+          {mostrarCamposPago ? (
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
+                Forma de pago (opcional)
+              </label>
+              <select
+                name="forma_pago"
+                value={formData.forma_pago}
+                onChange={(e) => setFormData({ ...formData, forma_pago: e.target.value })}
+                className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              >
+                <option value="">Sin especificar</option>
+                <option value="tarjeta">Tarjeta</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="efectivo">Efectivo</option>
+              </select>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
+                Forma de pago
+              </label>
+              <div className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-secondary">
+                No aplica mientras esté en estado previsto
+              </div>
+            </div>
+          )}
 
           <div>
             <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
@@ -374,88 +432,99 @@ export default function GastoForm({
             )}
           </div>
 
-          <div className="md:col-span-2">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                name="reembolsado"
-                checked={formData.reembolsado}
-                onChange={(e) => setFormData({ ...formData, reembolsado: e.target.checked })}
-                className="h-4 w-4 border-border-strong bg-[#0a0a0a] text-accent accent-accent focus:ring-accent"
-              />
-              <span className="text-sm text-text-primary">Marcar como reembolsado</span>
-            </label>
-          </div>
+          {mostrarCamposPago ? (
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="reembolsado"
+                  checked={formData.reembolsado}
+                  onChange={(e) => setFormData({ ...formData, reembolsado: e.target.checked })}
+                  className="h-4 w-4 border-border-strong bg-[#0a0a0a] text-accent accent-accent focus:ring-accent"
+                />
+                <span className="text-sm text-text-primary">Marcar como reembolsado</span>
+              </label>
+            </div>
+          ) : null}
         </div>
 
-        <div className="space-y-4 border border-border bg-[#0a0a0a] p-4">
-          <h3 className="text-sm uppercase tracking-[0.08em] text-text-primary">¿Con qué dinero se pagó?</h3>
+        {mostrarCamposPago ? (
+          <div className="space-y-4 border border-border bg-[#0a0a0a] p-4">
+            <h3 className="text-sm uppercase tracking-[0.08em] text-text-primary">¿Con qué dinero se pagó?</h3>
 
-          <div className="space-y-3">
-            {profiles.map((profile) => (
-              <div key={profile.id} className="flex flex-wrap items-center gap-3 sm:flex-nowrap">
-                <span className="min-w-0 flex-1 text-sm text-text-primary">{profile.nombre}</span>
+            <div className="space-y-3">
+              {profiles.map((profile) => (
+                <div key={profile.id} className="flex flex-wrap items-center gap-3 sm:flex-nowrap">
+                  <span className="min-w-0 flex-1 text-sm text-text-primary">{profile.nombre}</span>
+                  <div className="w-full sm:w-40">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      name={`fuente_${profile.id}`}
+                      value={fuentes[`socio_${profile.id}`] ?? ''}
+                      onChange={(e) => setFuente(`socio_${profile.id}`, e.target.value)}
+                    />
+                  </div>
+                  <span className="text-sm text-text-secondary">€</span>
+                </div>
+              ))}
+
+              <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 sm:flex-nowrap">
+                <span className="min-w-0 flex-1 text-sm text-text-primary">Fondo de empresa</span>
                 <div className="w-full sm:w-40">
                   <Input
                     type="number"
                     step="0.01"
                     min="0"
-                    name={`fuente_${profile.id}`}
-                    value={fuentes[`socio_${profile.id}`] ?? ''}
-                    onChange={(e) => setFuente(`socio_${profile.id}`, e.target.value)}
+                    name="fuente_fondo"
+                    value={fuentes.fondo ?? ''}
+                    onChange={(e) => setFuente('fondo', e.target.value)}
                   />
                 </div>
                 <span className="text-sm text-text-secondary">€</span>
               </div>
-            ))}
+            </div>
 
-            <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 sm:flex-nowrap">
-              <span className="min-w-0 flex-1 text-sm text-text-primary">Fondo de empresa</span>
-              <div className="w-full sm:w-40">
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  name="fuente_fondo"
-                  value={fuentes.fondo ?? ''}
-                  onChange={(e) => setFuente('fondo', e.target.value)}
-                />
-              </div>
-              <span className="text-sm text-text-secondary">€</span>
+            <div
+              className={`border p-3 ${mostrarAvisoFuentes ? 'border-danger/60 bg-danger-bg' : 'border-accent/40 bg-[#111]'}`}
+              style={{ fontFamily: '"JetBrains Mono", monospace' }}
+            >
+              <p className="text-sm text-text-primary">
+                Gasto: {cantidadGasto.toFixed(2)} € · Fuentes: {totalFuentes.toFixed(2)} € · Diferencia: {diferencia.toFixed(2)} €
+              </p>
+              {mostrarAvisoFuentes ? (
+                <p className="mt-2 text-xs text-danger" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  La suma de fuentes debe coincidir exactamente con la cantidad del gasto.
+                </p>
+              ) : requiereFuentesExactas ? (
+                <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  En una inversión debes repartir el 100% entre socios y/o fondo.
+                </p>
+              ) : totalFuentes === 0 ? (
+                <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  Si salió directamente del cobro del evento, puedes dejar las fuentes a 0.
+                </p>
+              ) : (
+                <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  Puedes registrar pagos parciales o completos desde socios/fondo.
+                </p>
+              )}
+              {!eventoValido && (
+                <p className="mt-2 text-xs text-danger" style={{ fontFamily: 'Inter, sans-serif' }}>
+                  Para un gasto del evento debes seleccionar un evento.
+                </p>
+              )}
             </div>
           </div>
-
-          <div
-            className={`border p-3 ${mostrarAvisoFuentes ? 'border-danger/60 bg-danger-bg' : 'border-accent/40 bg-[#111]'}`}
-            style={{ fontFamily: '"JetBrains Mono", monospace' }}
-          >
-            <p className="text-sm text-text-primary">
-              Gasto: {cantidadGasto.toFixed(2)} € · Fuentes: {totalFuentes.toFixed(2)} € · Diferencia: {diferencia.toFixed(2)} €
+        ) : (
+          <div className="space-y-2 border border-border bg-[#0a0a0a] p-4">
+            <h3 className="text-sm uppercase tracking-[0.08em] text-text-primary">Pago pendiente</h3>
+            <p className="text-sm text-text-secondary">
+              Este gasto está marcado como previsto. No se guardarán fuentes de pago ni afectará al neto repartible hasta marcarlo como pagado.
             </p>
-            {mostrarAvisoFuentes ? (
-              <p className="mt-2 text-xs text-danger" style={{ fontFamily: 'Inter, sans-serif' }}>
-                La suma de fuentes debe coincidir exactamente con la cantidad del gasto.
-              </p>
-            ) : requiereFuentesExactas ? (
-              <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
-                En una inversión debes repartir el 100% entre socios y/o fondo.
-              </p>
-            ) : totalFuentes === 0 ? (
-              <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
-                Si salió directamente del cobro del evento, puedes dejar las fuentes a 0.
-              </p>
-            ) : (
-              <p className="mt-2 text-xs text-text-secondary" style={{ fontFamily: 'Inter, sans-serif' }}>
-                Puedes registrar pagos parciales o completos desde socios/fondo.
-              </p>
-            )}
-            {!eventoValido && (
-              <p className="mt-2 text-xs text-danger" style={{ fontFamily: 'Inter, sans-serif' }}>
-                Para un gasto del evento debes seleccionar un evento.
-              </p>
-            )}
           </div>
-        </div>
+        )}
 
         <div className="flex flex-col gap-3 pt-4 sm:flex-row">
           <Button type="submit" variant="primary" disabled={!puedeEnviar} className="w-full sm:w-auto">

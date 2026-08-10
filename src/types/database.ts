@@ -118,6 +118,7 @@ export interface Database {
           forma_pago: 'tarjeta' | 'transferencia' | 'efectivo' | null;
           tipo_factura: 'A' | 'B' | null;
           factura_path: string | null;
+          pagado: boolean;
           // Campo legado: mantener mientras exista en bases antiguas
           pagado_por: string | null;
           reembolsado: boolean;
@@ -136,6 +137,7 @@ export interface Database {
           forma_pago?: 'tarjeta' | 'transferencia' | 'efectivo' | null;
           tipo_factura?: 'A' | 'B' | null;
           factura_path?: string | null;
+          pagado?: boolean;
           pagado_por?: string | null;
           reembolsado?: boolean;
           created_by?: string | null;
@@ -153,6 +155,7 @@ export interface Database {
           forma_pago?: 'tarjeta' | 'transferencia' | 'efectivo' | null;
           tipo_factura?: 'A' | 'B' | null;
           factura_path?: string | null;
+          pagado?: boolean;
           pagado_por?: string | null;
           reembolsado?: boolean;
           created_by?: string | null;

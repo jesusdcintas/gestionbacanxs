@@ -47,6 +47,7 @@ create table if not exists public.gastos (
   categoria text not null,
   fecha date not null,
   evento_id uuid references public.eventos(id) on delete set null,
+  pagado boolean not null default true,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz default now(),
   updated_at timestamptz default now()

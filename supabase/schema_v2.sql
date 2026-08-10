@@ -216,6 +216,7 @@ create table if not exists public.gastos (
   forma_pago text check (forma_pago in ('tarjeta', 'transferencia', 'efectivo')),
   tipo_factura text check (tipo_factura in ('A', 'B')),
   factura_path text,
+  pagado boolean not null default true,
   fecha date not null,
   evento_id uuid references public.eventos(id) on delete set null,
   pagado_por uuid references public.profiles(id),  -- null = pagado por la empresa
@@ -469,6 +470,7 @@ begin
       from public.gastos g
       where g.evento_id = p_evento_id
         and g.tipo_gasto = 'directo_evento'
+        and g.pagado = true
     ), 0)
   into v_neto_repartible;
 
@@ -762,7 +764,8 @@ create or replace function public.guardar_gasto_con_pagos(
   p_forma_pago text,
   p_tipo_factura text,
   p_factura_path text,
-  p_fuentes jsonb
+  p_fuentes jsonb,
+  p_pagado boolean default true
 )
 returns uuid
 language plpgsql
@@ -775,6 +778,7 @@ declare
   v_forma_pago text;
   v_tipo_factura text;
   v_total_fondo numeric(10,2);
+  v_pagado boolean;
 begin
   if p_cantidad is null or p_cantidad <= 0 then
     raise exception 'La cantidad del gasto debe ser mayor a 0';
@@ -783,6 +787,7 @@ begin
   v_tipo_gasto := coalesce(nullif(trim(p_tipo_gasto), ''), 'directo_evento');
   v_forma_pago := nullif(trim(coalesce(p_forma_pago, '')), '');
   v_tipo_factura := nullif(trim(coalesce(p_tipo_factura, '')), '');
+  v_pagado := coalesce(p_pagado, true);
 
   if v_tipo_gasto not in ('directo_evento', 'inversion_empresa') then
     raise exception 'Tipo de gasto no válido';
@@ -800,7 +805,7 @@ begin
     raise exception 'Los gastos directos de evento deben tener evento_id';
   end if;
 
-  if v_tipo_gasto in ('inversion_empresa') and (p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0) then
+  if v_pagado and v_tipo_gasto in ('inversion_empresa') and (p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0) then
     raise exception 'Debes enviar al menos una fuente de pago';
   end if;
 
@@ -809,7 +814,7 @@ begin
   from jsonb_array_elements(coalesce(p_fuentes, '[]'::jsonb)) x
   where coalesce((x.value->>'cantidad')::numeric, 0) > 0;
 
-  if v_tipo_gasto in ('inversion_empresa') and abs(v_suma_fuentes - p_cantidad) > 0.01 then
+  if v_pagado and v_tipo_gasto in ('inversion_empresa') and abs(v_suma_fuentes - p_cantidad) > 0.01 then
     raise exception 'La suma de fuentes (%) no coincide con la cantidad del gasto (%)', v_suma_fuentes, p_cantidad;
   end if;
 
@@ -822,6 +827,7 @@ begin
       forma_pago,
       tipo_factura,
       factura_path,
+      pagado,
       fecha,
       evento_id,
       reembolsado,
@@ -832,12 +838,13 @@ begin
       p_cantidad,
       coalesce(nullif(trim(p_categoria), ''), 'Otros'),
       v_tipo_gasto,
-      v_forma_pago,
+      case when v_pagado then v_forma_pago else null end,
       v_tipo_factura,
       nullif(trim(coalesce(p_factura_path, '')), ''),
+      v_pagado,
       coalesce(p_fecha, current_date),
       p_evento_id,
-      coalesce(p_reembolsado, false),
+      case when v_pagado then coalesce(p_reembolsado, false) else false end,
       auth.uid()
     )
     returning id into v_gasto_id;
@@ -848,12 +855,13 @@ begin
       cantidad = p_cantidad,
       categoria = coalesce(nullif(trim(p_categoria), ''), 'Otros'),
       tipo_gasto = v_tipo_gasto,
-      forma_pago = v_forma_pago,
+      forma_pago = case when v_pagado then v_forma_pago else null end,
       tipo_factura = v_tipo_factura,
       factura_path = nullif(trim(coalesce(p_factura_path, '')), ''),
+      pagado = v_pagado,
       fecha = coalesce(p_fecha, fecha),
       evento_id = p_evento_id,
-      reembolsado = coalesce(p_reembolsado, false),
+      reembolsado = case when v_pagado then coalesce(p_reembolsado, false) else false end,
       updated_at = now()
     where id = p_gasto_id;
 
@@ -874,13 +882,15 @@ begin
     and coalesce(concepto, '') not like 'Reembolso a socios:%'
     and coalesce(concepto, '') not like 'Reembolso a socio:%';
 
-  insert into public.gasto_pagos (gasto_id, socio_id, cantidad)
-  select
-    v_gasto_id,
-    nullif(value->>'socio_id', '')::uuid,
-    (value->>'cantidad')::numeric
-  from jsonb_array_elements(coalesce(p_fuentes, '[]'::jsonb))
-  where coalesce((value->>'cantidad')::numeric, 0) > 0;
+  if v_pagado then
+    insert into public.gasto_pagos (gasto_id, socio_id, cantidad)
+    select
+      v_gasto_id,
+      nullif(value->>'socio_id', '')::uuid,
+      (value->>'cantidad')::numeric
+    from jsonb_array_elements(coalesce(p_fuentes, '[]'::jsonb))
+    where coalesce((value->>'cantidad')::numeric, 0) > 0;
+  end if;
 
   select coalesce(sum(gp.cantidad), 0)
   into v_total_fondo
@@ -888,7 +898,7 @@ begin
   where gp.gasto_id = v_gasto_id
     and gp.socio_id is null;
 
-  if v_total_fondo > 0 then
+  if v_pagado and v_total_fondo > 0 then
     insert into public.fondo_movimientos (fecha, concepto, cantidad, evento_id, gasto_id)
     values (
       coalesce(p_fecha, current_date),
