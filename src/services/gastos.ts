@@ -17,6 +17,47 @@ export interface FuentePagoInput {
 
 const ALLOWED_FACTURA_MIME = new Set(['application/pdf', 'image/jpeg', 'image/png']);
 
+function getSupabaseErrorInfo(error: unknown) {
+  const raw = error as {
+    name?: string;
+    message?: string;
+    statusCode?: string | number;
+    code?: string;
+    error?: string;
+    details?: string;
+    hint?: string;
+  };
+
+  return {
+    name: raw?.name ?? 'SupabaseError',
+    message: raw?.message ?? 'Error desconocido',
+    statusCode: raw?.statusCode ?? null,
+    code: raw?.code ?? null,
+    error: raw?.error ?? null,
+    details: raw?.details ?? null,
+    hint: raw?.hint ?? null,
+  };
+}
+
+function buildSupabaseErrorMessage(prefix: string, error: unknown) {
+  const info = getSupabaseErrorInfo(error);
+  const chunks = [info.message];
+
+  if (info.error && info.error !== info.message) {
+    chunks.push(info.error);
+  }
+
+  if (info.code) {
+    chunks.push(`code=${info.code}`);
+  }
+
+  if (info.statusCode) {
+    chunks.push(`status=${info.statusCode}`);
+  }
+
+  return `${prefix}: ${chunks.join(' | ')}`;
+}
+
 function getFacturaExtension(file: File) {
   if (file.type === 'application/pdf') return 'pdf';
   if (file.type === 'image/jpeg') return 'jpg';
@@ -195,7 +236,11 @@ export async function subirFacturaGasto(
   if (previousPath) {
     const { error: removeError } = await supabase.storage.from('facturas').remove([previousPath]);
     if (removeError) {
-      console.error('Error borrando factura anterior:', removeError);
+      console.error('Error borrando factura anterior:', {
+        gastoId,
+        previousPath,
+        removeError: getSupabaseErrorInfo(removeError),
+      });
     }
   }
 
@@ -205,8 +250,15 @@ export async function subirFacturaGasto(
   });
 
   if (uploadError) {
-    console.error('Error subiendo factura:', uploadError);
-    throw new Error('No se pudo subir la factura al almacenamiento.');
+    console.error('Error subiendo factura a Storage:', {
+      gastoId,
+      facturaPath,
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size,
+      uploadError: getSupabaseErrorInfo(uploadError),
+    });
+    throw new Error(buildSupabaseErrorMessage('No se pudo subir la factura al almacenamiento', uploadError));
   }
 
   const { error: updateError } = await supabase
@@ -215,8 +267,12 @@ export async function subirFacturaGasto(
     .eq('id', gastoId);
 
   if (updateError) {
-    console.error('Error guardando factura_path en gasto:', updateError);
-    throw new Error('No se pudo guardar la ruta de la factura en el gasto.');
+    console.error('Error guardando factura_path en gasto:', {
+      gastoId,
+      facturaPath,
+      updateError: getSupabaseErrorInfo(updateError),
+    });
+    throw new Error(buildSupabaseErrorMessage('No se pudo guardar la ruta de la factura en el gasto', updateError));
   }
 
   return facturaPath;
@@ -245,8 +301,12 @@ export async function getFacturaSignedUrl(context: APIContext, gastoId: string) 
     .createSignedUrl(gasto.factura_path, 60);
 
   if (error || !data?.signedUrl) {
-    console.error('Error creando signed URL de factura:', error);
-    throw new Error('No se pudo generar el enlace temporal de la factura.');
+    console.error('Error creando signed URL de factura:', {
+      gastoId,
+      facturaPath: gasto.factura_path,
+      signedUrlError: getSupabaseErrorInfo(error),
+    });
+    throw new Error(buildSupabaseErrorMessage('No se pudo generar el enlace temporal de la factura', error));
   }
 
   return data.signedUrl;

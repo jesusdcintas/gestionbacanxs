@@ -52,6 +52,11 @@ if (Astro.request.method === 'POST') {
     return Astro.redirect(modoEvento && eventoParam ? `/eventos/${eventoParam}/detalle` : '/gastos');
   } catch (error) {
     console.error('Error creating gasto:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
+    return new Response(
+      `<html><body><h1>Error al crear gasto</h1><pre>${errorMessage}</pre><a href="/gastos/nuevo${eventoParam ? `?evento=${eventoParam}` : ''}">Volver</a></body></html>`,
+      { status: 500, headers: { 'Content-Type': 'text/html' } },
+    );
   }
 }
 ---
