@@ -22,6 +22,15 @@ export interface RepartoDetalleEvento {
 
 export type RepartosDetallePorSocio = Record<string, RepartoDetalleEvento[]>;
 
+export interface PendienteDetalleGasto {
+  gasto_id: string;
+  concepto: string;
+  fecha: string | null;
+  importe: number;
+}
+
+export type PendientesDetallePorSocio = Record<string, PendienteDetalleGasto[]>;
+
 /**
  * Obtiene métricas por socio para:
  * 1) Pendiente de reembolso (totalAportado no reembolsado)
@@ -188,6 +197,88 @@ export async function getRepartosDetallePorSocio(
     salida[socioId].sort((a, b) => {
       const ta = a.eventoFecha ? new Date(a.eventoFecha).getTime() : 0;
       const tb = b.eventoFecha ? new Date(b.eventoFecha).getTime() : 0;
+      return tb - ta;
+    });
+  }
+
+  return salida;
+}
+
+/**
+ * Histórico de gastos pendientes por socio (aportaciones aún no reembolsadas).
+ */
+export async function getPendientesDetallePorSocio(
+  context: APIContext,
+): Promise<PendientesDetallePorSocio> {
+  const supabase = getSupabaseServerClient(context);
+
+  type GastoJoin = {
+    id: string;
+    concepto: string;
+    fecha: string | null;
+    reembolsado: boolean;
+  };
+
+  type PagoRow = {
+    socio_id: string | null;
+    cantidad: number | string;
+    gastos: GastoJoin | GastoJoin[] | null;
+  };
+
+  const { data, error } = await supabase
+    .from('gasto_pagos')
+    .select('socio_id, cantidad, gastos!inner(id, concepto, fecha, reembolsado)')
+    .not('socio_id', 'is', null)
+    .eq('gastos.reembolsado', false)
+    .gt('cantidad', 0);
+
+  if (error) {
+    console.error('Error fetching detalle pendientes por socio:', error);
+    throw new Error('No se pudo cargar el detalle de pendientes por socio');
+  }
+
+  const acumulado = new Map<string, PendienteDetalleGasto & { socio_id: string }>();
+
+  for (const row of (data ?? []) as PagoRow[]) {
+    if (!row.socio_id) continue;
+
+    const gastoJoin = Array.isArray(row.gastos) ? row.gastos[0] ?? null : row.gastos;
+    if (!gastoJoin) continue;
+
+    const importe = Number(row.cantidad) || 0;
+    const key = `${row.socio_id}::${gastoJoin.id}`;
+    const previo = acumulado.get(key);
+
+    if (previo) {
+      previo.importe += importe;
+      continue;
+    }
+
+    acumulado.set(key, {
+      socio_id: row.socio_id,
+      gasto_id: gastoJoin.id,
+      concepto: gastoJoin.concepto,
+      fecha: gastoJoin.fecha,
+      importe,
+    });
+  }
+
+  const salida: PendientesDetallePorSocio = {};
+
+  for (const item of acumulado.values()) {
+    if (!salida[item.socio_id]) salida[item.socio_id] = [];
+    salida[item.socio_id].push({
+      gasto_id: item.gasto_id,
+      concepto: item.concepto,
+      fecha: item.fecha,
+      importe: item.importe,
+    });
+  }
+
+  for (const socioId of Object.keys(salida)) {
+    salida[socioId].sort((a, b) => {
+      const ta = a.fecha ? new Date(a.fecha).getTime() : 0;
+      const tb = b.fecha ? new Date(b.fecha).getTime() : 0;
       return tb - ta;
     });
   }

@@ -174,7 +174,7 @@ export async function registrarSalidaFondo(
 /**
  * Obtiene el histórico de saldos del fondo mes a mes
  */
-export async function getHistoricoSaldosFondo(context: APIContext, meses: number = 12) {
+export async function getHistoricoSaldosFondo(context: APIContext, meses?: number | null) {
   const movimientos = await getMovimientosFondo(context);
   
   // Agrupar por mes y calcular saldo acumulado
@@ -192,7 +192,11 @@ export async function getHistoricoSaldosFondo(context: APIContext, meses: number
     mesesMap.set(mesKey, { mes: mesKey, saldo: saldoAcumulado });
   }
   
-  return Array.from(mesesMap.values())
-    .sort((a, b) => b.mes.localeCompare(a.mes))
-    .slice(0, meses);
+  const ordered = Array.from(mesesMap.values()).sort((a, b) => b.mes.localeCompare(a.mes));
+
+  if (typeof meses === 'number' && meses > 0) {
+    return ordered.slice(0, meses);
+  }
+
+  return ordered;
 }

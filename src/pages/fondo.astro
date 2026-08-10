@@ -2,7 +2,7 @@
 import AppLayout from '../layouts/AppLayout.astro';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card.tsx';
 import { StampLabel } from '../components/ui/StampLabel.tsx';
-import FondoChart from '../components/fondo/FondoChart.tsx';
+import FondoEvolucionPanel from '../components/fondo/FondoEvolucionPanel.tsx';
 import FondoMovimientosList from '../components/fondo/FondoMovimientosList.tsx';
 import MovimientoFondoForm from '../components/fondo/MovimientoFondoForm.tsx';
 import { getMovimientosFondo, getSaldoFondo, getHistoricoSaldosFondo } from '../services/fondo';
@@ -16,7 +16,7 @@ try {
   [saldo, movimientos, historico] = await Promise.all([
     getSaldoFondo(Astro),
     getMovimientosFondo(Astro),
-    getHistoricoSaldosFondo(Astro, 12),
+    getHistoricoSaldosFondo(Astro),
   ]);
   historico = [...historico].reverse();
 } catch (err) {
@@ -107,7 +107,7 @@ const formatCurrency = (value: number) =>
         <CardTitle className="mt-3">Saldo histórico mes a mes</CardTitle>
       </CardHeader>
       <CardContent>
-        <FondoChart data={historico} client:load />
+        <FondoEvolucionPanel historico={historico} client:load />
       </CardContent>
     </Card>
 

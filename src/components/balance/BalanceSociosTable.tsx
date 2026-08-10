@@ -1,11 +1,12 @@
 import { Fragment, useState, type KeyboardEvent } from 'react';
 import { ChevronDown } from 'lucide-react';
-import type { BalanceSocio, RepartosDetallePorSocio } from '../../services/balance';
+import type { BalanceSocio, PendientesDetallePorSocio, RepartosDetallePorSocio } from '../../services/balance';
 import { StampLabel } from '../ui/StampLabel';
 
 interface Props {
   balances: BalanceSocio[];
   repartosDetallePorSocio: RepartosDetallePorSocio;
+  pendientesDetallePorSocio: PendientesDetallePorSocio;
 }
 
 const formatCurrency = (value: number) =>
@@ -21,17 +22,33 @@ const formatDate = (value: string | null) => {
   }).format(new Date(value));
 };
 
-export default function BalanceSociosTable({ balances, repartosDetallePorSocio }: Props) {
+export default function BalanceSociosTable({
+  balances,
+  repartosDetallePorSocio,
+  pendientesDetallePorSocio,
+}: Props) {
+  const [expandedPendienteSocioId, setExpandedPendienteSocioId] = useState<string | null>(null);
   const [expandedSocioId, setExpandedSocioId] = useState<string | null>(null);
 
-  const toggleRow = (socioId: string) => {
+  const togglePendienteRow = (socioId: string) => {
+    setExpandedPendienteSocioId((prev) => (prev === socioId ? null : socioId));
+  };
+
+  const toggleRepartoRow = (socioId: string) => {
     setExpandedSocioId((prev) => (prev === socioId ? null : socioId));
   };
 
-  const onRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, socioId: string) => {
+  const onPendienteRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, socioId: string) => {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      toggleRow(socioId);
+      togglePendienteRow(socioId);
+    }
+  };
+
+  const onRepartoRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, socioId: string) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      toggleRepartoRow(socioId);
     }
   };
 
@@ -66,24 +83,99 @@ export default function BalanceSociosTable({ balances, repartosDetallePorSocio }
               </tr>
             </thead>
             <tbody>
-              {balances.map((b, idx) => (
-                <tr
-                  key={`pendiente-${b.socio_id}`}
-                  className="border-b border-border hover:bg-surface-hover transition-colors"
-                >
-                  <td className="py-3 px-3">
-                    <StampLabel rotate={idx % 2 === 0 ? 'left' : 'right'} variant="outline">
-                      {b.nombre}
-                    </StampLabel>
-                  </td>
-                  <td
-                    className="py-3 px-3 text-right font-semibold text-text-primary"
-                    style={{ fontFamily: '"JetBrains Mono", monospace' }}
-                  >
-                    {formatCurrency(b.totalAportado)}
-                  </td>
-                </tr>
-              ))}
+              {balances.map((b, idx) => {
+                const isExpanded = expandedPendienteSocioId === b.socio_id;
+                const detalles = pendientesDetallePorSocio[b.socio_id] ?? [];
+
+                return (
+                  <Fragment key={`pendiente-${b.socio_id}`}>
+                    <tr
+                      className={`border-b border-border transition-colors ${
+                        isExpanded ? 'bg-surface-hover' : 'hover:bg-surface-hover'
+                      } cursor-pointer`}
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
+                      onClick={() => togglePendienteRow(b.socio_id)}
+                      onKeyDown={(event) => onPendienteRowKeyDown(event, b.socio_id)}
+                    >
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-2">
+                          <ChevronDown
+                            className={`h-4 w-4 text-accent transition-transform duration-200 ${
+                              isExpanded ? 'rotate-180' : 'rotate-0'
+                            }`}
+                            strokeWidth={1.75}
+                          />
+                          <StampLabel rotate={idx % 2 === 0 ? 'left' : 'right'} variant="outline">
+                            {b.nombre}
+                          </StampLabel>
+                        </div>
+                      </td>
+                      <td
+                        className="py-3 px-3 text-right font-semibold text-text-primary"
+                        style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                      >
+                        {formatCurrency(b.totalAportado)}
+                      </td>
+                    </tr>
+
+                    {isExpanded && (
+                      <tr className="border-b border-border bg-[#121212]">
+                        <td colSpan={2} className="px-3 pb-4 pt-1">
+                          <div className="ml-6 border border-border bg-surface/40 p-3">
+                            {detalles.length === 0 ? (
+                              <p className="text-sm text-text-secondary">
+                                Sin gastos pendientes registrados
+                              </p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b border-border">
+                                      <th className="text-left py-2 pr-3 text-[11px] uppercase tracking-[0.08em] text-text-secondary font-medium">
+                                        Concepto
+                                      </th>
+                                      <th className="text-left py-2 px-3 text-[11px] uppercase tracking-[0.08em] text-text-secondary font-medium">
+                                        Fecha
+                                      </th>
+                                      <th className="text-right py-2 pl-3 text-[11px] uppercase tracking-[0.08em] text-text-secondary font-medium">
+                                        Importe
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {detalles.map((detalle) => (
+                                      <tr
+                                        key={`${b.socio_id}-${detalle.gasto_id}`}
+                                        className="border-b border-border/70 last:border-0"
+                                      >
+                                        <td className="py-2 pr-3 text-text-primary">{detalle.concepto}</td>
+                                        <td
+                                          className="py-2 px-3 text-text-secondary"
+                                          style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                                        >
+                                          {formatDate(detalle.fecha)}
+                                        </td>
+                                        <td
+                                          className="py-2 pl-3 text-right text-text-primary"
+                                          style={{ fontFamily: '"JetBrains Mono", monospace' }}
+                                        >
+                                          {formatCurrency(detalle.importe)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -134,8 +226,8 @@ export default function BalanceSociosTable({ balances, repartosDetallePorSocio }
                       role="button"
                       tabIndex={0}
                       aria-expanded={isExpanded}
-                      onClick={() => toggleRow(b.socio_id)}
-                      onKeyDown={(event) => onRowKeyDown(event, b.socio_id)}
+                      onClick={() => toggleRepartoRow(b.socio_id)}
+                      onKeyDown={(event) => onRepartoRowKeyDown(event, b.socio_id)}
                     >
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-2">

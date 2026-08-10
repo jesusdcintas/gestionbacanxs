@@ -11,13 +11,15 @@ import {
   getCategoryData,
   getBalanceSocios,
   getRepartosDetallePorSocio,
+  getPendientesDetallePorSocio,
 } from '../services/balance';
 
-const [monthlyData, categoryData, balanceSocios, repartosDetallePorSocio] = await Promise.all([
+const [monthlyData, categoryData, balanceSocios, repartosDetallePorSocio, pendientesDetallePorSocio] = await Promise.all([
   getBalanceData(Astro, 6),
   getCategoryData(Astro),
   getBalanceSocios(Astro),
   getRepartosDetallePorSocio(Astro),
+  getPendientesDetallePorSocio(Astro),
 ]);
 
 const totalIngresos = monthlyData.reduce((sum, m) => sum + m.ingresos, 0);
@@ -92,6 +94,7 @@ const formatCurrency = (value: number) =>
           <BalanceSociosTable
             balances={balanceSocios}
             repartosDetallePorSocio={repartosDetallePorSocio}
+            pendientesDetallePorSocio={pendientesDetallePorSocio}
             client:load
           />
         </CardContent>
