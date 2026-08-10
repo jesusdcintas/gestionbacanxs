@@ -6,6 +6,8 @@ import { getEventos } from '../../services/eventos';
 import { getProfiles } from '../../services/profiles';
 
 const { id } = Astro.params;
+const returnToRaw = Astro.url.searchParams.get('return_to') ?? '/gastos';
+const returnTo = returnToRaw.startsWith('/') ? returnToRaw : '/gastos';
 
 if (!id) {
   return Astro.redirect('/gastos');
@@ -26,6 +28,8 @@ const profiles = await getProfiles(Astro);
 if (Astro.request.method === 'POST') {
   try {
     const formData = await Astro.request.formData();
+    const formReturnToRaw = formData.get('return_to')?.toString() ?? returnTo;
+    const formReturnTo = formReturnToRaw.startsWith('/') ? formReturnToRaw : '/gastos';
     const formaPago = formData.get('forma_pago')?.toString().trim() || null;
     const tipoFactura = formData.get('tipo_factura')?.toString().trim() || null;
     const facturaRaw = formData.get('factura');
@@ -63,12 +67,12 @@ if (Astro.request.method === 'POST') {
       await subirFacturaGasto(Astro, id, facturaFile, gastoActualizado.factura_path ?? gasto.factura_path);
     }
 
-    return Astro.redirect('/gastos');
+    return Astro.redirect(formReturnTo);
   } catch (error) {
     console.error('Error updating gasto:', error);
     const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
     return new Response(
-      `<html><body><h1>Error al actualizar gasto</h1><pre>${errorMessage}</pre><a href="/gastos/${id}">Volver</a></body></html>`,
+      `<html><body><h1>Error al actualizar gasto</h1><pre>${errorMessage}</pre><a href="/gastos/${id}?return_to=${encodeURIComponent(returnTo)}">Volver</a></body></html>`,
       { status: 500, headers: { 'Content-Type': 'text/html' } }
     );
   }
@@ -82,6 +86,6 @@ if (Astro.request.method === 'POST') {
       <p class="text-text-secondary mt-1">Modifica los detalles del gasto</p>
     </div>
 
-    <GastoForm gasto={gasto} eventos={eventos} profiles={profiles} client:load />
+    <GastoForm gasto={gasto} eventos={eventos} profiles={profiles} cancelTo={returnTo} client:load />
   </div>
 </AppLayout>

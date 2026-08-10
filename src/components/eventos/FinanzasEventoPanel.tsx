@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { StampLabel } from '../ui/StampLabel';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import RepartoSection from './RepartoSection';
+import GastoResumenModal from '../gastos/GastoResumenModal';
 import { IVA_POR_DEFECTO } from '../../utils/finanzas';
 import { formatCurrency } from '../../lib/format';
 import { formatDate } from '../../lib/date';
@@ -28,6 +29,7 @@ type RepartoHistorico = {
 
 interface Props {
   eventoId: string;
+  eventoNombre?: string;
   presupuesto: number;
   ingresoNeto: number;
   ivaImporte: number;
@@ -40,10 +42,13 @@ interface Props {
   gastosIniciales: GastoEvento[];
   socios: Profile[];
   repartosIniciales: RepartoHistorico[];
+  initialOpenGastoId?: string | null;
+  initialVisibleGastosIds?: string[];
 }
 
 export default function FinanzasEventoPanel({
   eventoId,
+  eventoNombre,
   presupuesto,
   ingresoNeto,
   ivaImporte,
@@ -56,14 +61,50 @@ export default function FinanzasEventoPanel({
   gastosIniciales,
   socios,
   repartosIniciales,
+  initialOpenGastoId = null,
+  initialVisibleGastosIds = [],
 }: Props) {
   const [gastos, setGastos] = useState(gastosIniciales);
   const [totalGastos, setTotalGastos] = useState(totalGastosInicial);
   const [deleteRow, setDeleteRow] = useState<GastoEvento | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [resumenOpen, setResumenOpen] = useState(false);
+  const [activeGastoId, setActiveGastoId] = useState<string | null>(null);
 
   const netoRepartible = useMemo(() => ingresoNeto - totalGastos, [ingresoNeto, totalGastos]);
+  const orderedIds = useMemo(() => gastos.map((gasto) => gasto.id), [gastos]);
+
+  useEffect(() => {
+    if (!initialOpenGastoId || activeGastoId) return;
+    const candidateIds = initialVisibleGastosIds.length > 0 ? initialVisibleGastosIds : orderedIds;
+    const firstVisible = candidateIds.find((id) => orderedIds.includes(id));
+    const targetId = orderedIds.includes(initialOpenGastoId) ? initialOpenGastoId : firstVisible ?? null;
+    if (targetId) {
+      setActiveGastoId(targetId);
+      setResumenOpen(true);
+    }
+  }, [initialOpenGastoId, initialVisibleGastosIds, orderedIds, activeGastoId]);
+
+  const closeResumen = () => {
+    setResumenOpen(false);
+    setActiveGastoId(null);
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('open_gasto');
+    url.searchParams.delete('visible_gastos');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+  };
+
+  const editFromResumen = (id: string, visibleIds: string[]) => {
+    const returnUrl = new URL(window.location.href);
+    returnUrl.searchParams.set('open_gasto', id);
+    returnUrl.searchParams.set('visible_gastos', visibleIds.join(','));
+
+    const editUrl = new URL(`/gastos/${id}`, window.location.origin);
+    editUrl.searchParams.set('return_to', `${returnUrl.pathname}${returnUrl.search}`);
+    window.location.href = `${editUrl.pathname}${editUrl.search}`;
+  };
 
   const fuentesTexto = (gasto: GastoEvento) => {
     const fuentes = (gasto.gasto_pagos ?? []).filter((f) => Number(f.cantidad) > 0);
@@ -176,7 +217,23 @@ export default function FinanzasEventoPanel({
         ) : (
           <div className="space-y-2">
             {gastos.map((gasto) => (
-              <div key={gasto.id} className="flex items-center justify-between gap-4 border border-border bg-[#0a0a0a] p-3 transition-colors hover:border-border-strong">
+              <div
+                key={gasto.id}
+                className="flex cursor-pointer items-center justify-between gap-4 border border-border bg-[#0a0a0a] p-3 transition-colors hover:border-border-strong"
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  setActiveGastoId(gasto.id);
+                  setResumenOpen(true);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setActiveGastoId(gasto.id);
+                    setResumenOpen(true);
+                  }
+                }}
+              >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-3">
                     <p className="font-medium text-text-primary">{gasto.concepto}</p>
@@ -193,7 +250,16 @@ export default function FinanzasEventoPanel({
 
                 <div className="flex items-center gap-3">
                   <span className="font-semibold text-danger" style={{ fontFamily: '"JetBrains Mono", monospace' }}>−{Number(gasto.cantidad).toFixed(2)} €</span>
-                  <Button type="button" variant="danger" size="sm" onClick={() => { setDeleteError(null); setDeleteRow(gasto); }}>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    size="sm"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setDeleteError(null);
+                      setDeleteRow(gasto);
+                    }}
+                  >
                     Eliminar
                   </Button>
                 </div>
@@ -219,6 +285,17 @@ export default function FinanzasEventoPanel({
           if (!deleteLoading) setDeleteRow(null);
         }}
         onConfirm={handleDelete}
+      />
+
+      <GastoResumenModal
+        open={resumenOpen}
+        gastos={gastos}
+        orderedIds={orderedIds}
+        currentId={activeGastoId}
+        onClose={closeResumen}
+        onSelectId={setActiveGastoId}
+        onEdit={editFromResumen}
+        eventoFallbackNombre={eventoNombre}
       />
     </div>
   );

@@ -21,6 +21,11 @@ import {
 import { getEstadoStamp, getEstadoVisible, getEstadoVisibleLabel } from '../../../utils/eventoEstado';
 
 const { id } = Astro.params;
+const initialOpenGastoId = Astro.url.searchParams.get('open_gasto');
+const initialVisibleGastosIds = (Astro.url.searchParams.get('visible_gastos') ?? '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 if (!id) {
   return Astro.redirect('/eventos');
@@ -244,6 +249,7 @@ const estadoStamp = getEstadoStamp(estadoVisible);
 
     <FinanzasEventoPanel
       eventoId={id}
+      eventoNombre={evento.nombre}
       presupuesto={presupuesto}
       ingresoNeto={ingresoNeto}
       ivaImporte={ivaImporte}
@@ -256,6 +262,8 @@ const estadoStamp = getEstadoStamp(estadoVisible);
       gastosIniciales={gastos}
       socios={socios}
       repartosIniciales={repartosFormateados}
+      initialOpenGastoId={initialOpenGastoId}
+      initialVisibleGastosIds={initialVisibleGastosIds}
       client:load
     />
   </div>

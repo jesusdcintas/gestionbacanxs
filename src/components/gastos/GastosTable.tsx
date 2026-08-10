@@ -6,6 +6,7 @@ import { Checkbox } from '../ui/Checkbox';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { Select } from '../ui/Select';
 import { StampLabel } from '../ui/StampLabel';
+import GastoResumenModal from './GastoResumenModal';
 import { Paperclip, Trash2 } from 'lucide-react';
 import type { Database } from '../../types/database';
 
@@ -25,6 +26,8 @@ interface Props {
   editBasePath: string;
   emptyMessage?: string;
   profiles: Profile[];
+  initialOpenGastoId?: string | null;
+  initialVisibleGastosIds?: string[];
   onGastoDeleted?: (gasto: GastoEnriquecido) => void;
   onGastosDeleted?: (gastoIds: string[]) => void;
 }
@@ -53,6 +56,8 @@ export default function GastosTable({
   editBasePath,
   emptyMessage = 'No hay gastos registrados. Crea tu primer gasto.',
   profiles,
+  initialOpenGastoId = null,
+  initialVisibleGastosIds = [],
   onGastoDeleted,
   onGastosDeleted,
 }: Props) {
@@ -71,6 +76,8 @@ export default function GastosTable({
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [facturaError, setFacturaError] = useState<string | null>(null);
+  const [resumenOpen, setResumenOpen] = useState(false);
+  const [activeGastoId, setActiveGastoId] = useState<string | null>(null);
 
   useEffect(() => {
     setRows(gastos);
@@ -95,9 +102,46 @@ export default function GastosTable({
 
   const selectedCount = selectedIds.length;
   const allVisibleSelected = sortedRows.length > 0 && sortedRows.every((row) => selectedIds.includes(row.id));
+  const orderedIds = sortedRows.map((row) => row.id);
+
+  useEffect(() => {
+    if (!initialOpenGastoId) return;
+    if (activeGastoId) return;
+
+    const candidateIds = initialVisibleGastosIds.length > 0 ? initialVisibleGastosIds : orderedIds;
+    const firstVisible = candidateIds.find((id) => orderedIds.includes(id));
+    const targetId = orderedIds.includes(initialOpenGastoId) ? initialOpenGastoId : firstVisible ?? null;
+
+    if (targetId) {
+      setActiveGastoId(targetId);
+      setResumenOpen(true);
+    }
+  }, [initialOpenGastoId, initialVisibleGastosIds, orderedIds, activeGastoId]);
 
   const openItem = (id: string) => {
-    window.location.href = `${editBasePath}/${id}`;
+    setActiveGastoId(id);
+    setResumenOpen(true);
+  };
+
+  const closeResumen = () => {
+    setResumenOpen(false);
+    setActiveGastoId(null);
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete('open_gasto');
+    url.searchParams.delete('visible_gastos');
+    window.history.replaceState({}, '', `${url.pathname}${url.search}`);
+  };
+
+  const editFromResumen = (id: string, visibleIds: string[]) => {
+    const returnUrl = new URL(window.location.href);
+    returnUrl.searchParams.set('open_gasto', id);
+    returnUrl.searchParams.set('visible_gastos', visibleIds.join(','));
+
+    const editUrl = new URL(`${editBasePath}/${id}`, window.location.origin);
+    editUrl.searchParams.set('return_to', `${returnUrl.pathname}${returnUrl.search}`);
+
+    window.location.href = `${editUrl.pathname}${editUrl.search}`;
   };
 
   const openDeleteDialog = (gasto: GastoEnriquecido) => {
@@ -445,7 +489,7 @@ export default function GastosTable({
                   <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
                     <div className="flex justify-end gap-2">
                       <Button type="button" variant="secondary" size="sm" onClick={() => openItem(gasto.id)}>
-                        Abrir
+                        Resumen
                       </Button>
                       <Button type="button" variant="danger" size="sm" onClick={() => openDeleteDialog(gasto)}>
                         <Trash2 size={14} />
@@ -540,6 +584,16 @@ export default function GastosTable({
 
       {deleteError ? <div className="text-sm text-danger">{deleteError}</div> : null}
       {facturaError ? <div className="text-sm text-danger">{facturaError}</div> : null}
+
+      <GastoResumenModal
+        open={resumenOpen}
+        gastos={rows}
+        orderedIds={orderedIds}
+        currentId={activeGastoId}
+        onClose={closeResumen}
+        onSelectId={setActiveGastoId}
+        onEdit={editFromResumen}
+      />
     </div>
   );
 }

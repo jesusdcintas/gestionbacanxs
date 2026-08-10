@@ -25,6 +25,11 @@ const tipoFiltro: TipoFiltro = (
 
 const todos = await getGastos(Astro);
 const profiles = await getProfiles(Astro);
+const initialOpenGastoId = Astro.url.searchParams.get('open_gasto');
+const initialVisibleGastosIds = (Astro.url.searchParams.get('visible_gastos') ?? '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 
 const emptyMessages: Record<Filtro, string> = {
   todos: 'No hay gastos registrados. Crea tu primer gasto.',
@@ -49,6 +54,15 @@ const emptyMessages: Record<Filtro, string> = {
       </a>
     </div>
 
-    <GastosDashboard todosIniciales={todos} profiles={profiles} filtro={filtro} tipoFiltro={tipoFiltro} emptyMessage={emptyMessages[filtro]} client:load />
+    <GastosDashboard
+      todosIniciales={todos}
+      profiles={profiles}
+      filtro={filtro}
+      tipoFiltro={tipoFiltro}
+      emptyMessage={emptyMessages[filtro]}
+      initialOpenGastoId={initialOpenGastoId}
+      initialVisibleGastosIds={initialVisibleGastosIds}
+      client:load
+    />
   </div>
 </AppLayout>

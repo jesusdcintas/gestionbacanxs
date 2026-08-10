@@ -20,6 +20,7 @@ interface Props {
   profiles: Profile[];
   defaultEventoId?: string | null;
   mode?: 'general' | 'evento';
+  cancelTo?: string;
 }
 
 export default function GastoForm({
@@ -28,6 +29,7 @@ export default function GastoForm({
   profiles,
   defaultEventoId = null,
   mode = 'general',
+  cancelTo = '/gastos',
 }: Props) {
   const modoEvento = mode === 'evento';
 
@@ -131,6 +133,7 @@ export default function GastoForm({
   return (
     <Card>
       <form method="POST" encType="multipart/form-data" className="space-y-6" onSubmit={onSubmit}>
+        <input type="hidden" name="return_to" value={cancelTo} />
         <div>
           <h2 className="text-xl font-semibold mb-4">{gasto ? 'Editar Gasto' : 'Nuevo Gasto'}</h2>
         </div>
@@ -458,7 +461,7 @@ export default function GastoForm({
           <Button type="submit" variant="primary" disabled={!puedeEnviar} className="w-full sm:w-auto">
             {gasto ? 'Actualizar' : 'Crear Gasto'}
           </Button>
-          <Button type="button" variant="secondary" onClick={() => (window.location.href = '/gastos')} className="w-full sm:w-auto">
+          <Button type="button" variant="secondary" onClick={() => (window.location.href = cancelTo)} className="w-full sm:w-auto">
             Cancelar
           </Button>
         </div>

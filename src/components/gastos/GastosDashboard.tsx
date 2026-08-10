@@ -25,6 +25,8 @@ interface Props {
   filtro: Filtro;
   tipoFiltro: TipoFiltro;
   emptyMessage: string;
+  initialOpenGastoId?: string | null;
+  initialVisibleGastosIds?: string[];
 }
 
 const tabs: { value: Filtro; label: string }[] = [
@@ -41,7 +43,15 @@ const tipoTabs: { value: TipoFiltro; label: string }[] = [
 
 const sumar = (arr: { cantidad: number }[]) => arr.reduce((sum, gasto) => sum + Number(gasto.cantidad), 0);
 
-export default function GastosDashboard({ todosIniciales, profiles, filtro, tipoFiltro, emptyMessage }: Props) {
+export default function GastosDashboard({
+  todosIniciales,
+  profiles,
+  filtro,
+  tipoFiltro,
+  emptyMessage,
+  initialOpenGastoId,
+  initialVisibleGastosIds = [],
+}: Props) {
   const [todos, setTodos] = useState(todosIniciales);
 
   const generales = useMemo(() => todos.filter((gasto) => gasto.evento_id === null), [todos]);
@@ -155,6 +165,8 @@ export default function GastosDashboard({ todosIniciales, profiles, filtro, tipo
             profiles={profiles}
             emptyMessage={emptyMessage}
             editBasePath="/gastos"
+            initialOpenGastoId={initialOpenGastoId ?? null}
+            initialVisibleGastosIds={initialVisibleGastosIds}
             onGastoDeleted={(gasto) => removeIds([gasto.id])}
             onGastosDeleted={(ids) => removeIds(ids)}
           />
