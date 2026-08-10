@@ -213,6 +213,9 @@ create table if not exists public.gastos (
   cantidad numeric(10,2) not null check (cantidad > 0),
   categoria text not null check (categoria in ('Transporte', 'Equipamiento', 'Alojamiento', 'Comida', 'Promoción', 'Servicios', 'Consumible', 'Otros')),
   tipo_gasto text not null default 'directo_evento' check (tipo_gasto in ('directo_evento', 'inversion_empresa')),
+  forma_pago text check (forma_pago in ('tarjeta', 'transferencia', 'efectivo')),
+  tipo_factura text check (tipo_factura in ('A', 'B')),
+  factura_path text,
   fecha date not null,
   evento_id uuid references public.eventos(id) on delete set null,
   pagado_por uuid references public.profiles(id),  -- null = pagado por la empresa
@@ -756,6 +759,9 @@ create or replace function public.guardar_gasto_con_pagos(
   p_fecha date,
   p_evento_id uuid,
   p_reembolsado boolean,
+  p_forma_pago text,
+  p_tipo_factura text,
+  p_factura_path text,
   p_fuentes jsonb
 )
 returns uuid
@@ -766,6 +772,8 @@ declare
   v_gasto_id uuid;
   v_suma_fuentes numeric(10,2);
   v_tipo_gasto text;
+  v_forma_pago text;
+  v_tipo_factura text;
   v_total_fondo numeric(10,2);
 begin
   if p_cantidad is null or p_cantidad <= 0 then
@@ -773,9 +781,19 @@ begin
   end if;
 
   v_tipo_gasto := coalesce(nullif(trim(p_tipo_gasto), ''), 'directo_evento');
+  v_forma_pago := nullif(trim(coalesce(p_forma_pago, '')), '');
+  v_tipo_factura := nullif(trim(coalesce(p_tipo_factura, '')), '');
 
   if v_tipo_gasto not in ('directo_evento', 'inversion_empresa') then
     raise exception 'Tipo de gasto no válido';
+  end if;
+
+  if v_forma_pago is not null and v_forma_pago not in ('tarjeta', 'transferencia', 'efectivo') then
+    raise exception 'Forma de pago no válida';
+  end if;
+
+  if v_tipo_factura is not null and v_tipo_factura not in ('A', 'B') then
+    raise exception 'Tipo de factura no válido';
   end if;
 
   if v_tipo_gasto = 'directo_evento' and p_evento_id is null then
@@ -801,6 +819,9 @@ begin
       cantidad,
       categoria,
       tipo_gasto,
+      forma_pago,
+      tipo_factura,
+      factura_path,
       fecha,
       evento_id,
       reembolsado,
@@ -811,6 +832,9 @@ begin
       p_cantidad,
       coalesce(nullif(trim(p_categoria), ''), 'Otros'),
       v_tipo_gasto,
+      v_forma_pago,
+      v_tipo_factura,
+      nullif(trim(coalesce(p_factura_path, '')), ''),
       coalesce(p_fecha, current_date),
       p_evento_id,
       coalesce(p_reembolsado, false),
@@ -824,6 +848,9 @@ begin
       cantidad = p_cantidad,
       categoria = coalesce(nullif(trim(p_categoria), ''), 'Otros'),
       tipo_gasto = v_tipo_gasto,
+      forma_pago = v_forma_pago,
+      tipo_factura = v_tipo_factura,
+      factura_path = nullif(trim(coalesce(p_factura_path, '')), ''),
       fecha = coalesce(p_fecha, fecha),
       evento_id = p_evento_id,
       reembolsado = coalesce(p_reembolsado, false),

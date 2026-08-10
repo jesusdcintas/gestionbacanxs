@@ -38,6 +38,8 @@ export default function GastoForm({
     tipo_gasto: gasto?.tipo_gasto || (modoEvento ? 'directo_evento' : 'inversion_empresa'),
     fecha: gasto?.fecha || new Date().toISOString().split('T')[0],
     evento_id: gasto?.evento_id || defaultEventoId || '',
+    forma_pago: gasto?.forma_pago || '',
+    tipo_factura: gasto?.tipo_factura || '',
     reembolsado: Boolean(gasto?.reembolsado),
   });
 
@@ -77,7 +79,7 @@ export default function GastoForm({
 
   return (
     <Card>
-      <form method="POST" className="space-y-6" onSubmit={onSubmit}>
+      <form method="POST" encType="multipart/form-data" className="space-y-6" onSubmit={onSubmit}>
         <div>
           <h2 className="text-xl font-semibold mb-4">{gasto ? 'Editar Gasto' : 'Nuevo Gasto'}</h2>
         </div>
@@ -196,6 +198,54 @@ export default function GastoForm({
               </div>
             </>
           )}
+
+          <div>
+            <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
+              Forma de pago (opcional)
+            </label>
+            <select
+              name="forma_pago"
+              value={formData.forma_pago}
+              onChange={(e) => setFormData({ ...formData, forma_pago: e.target.value })}
+              className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+              <option value="">Sin especificar</option>
+              <option value="tarjeta">Tarjeta</option>
+              <option value="transferencia">Transferencia</option>
+              <option value="efectivo">Efectivo</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
+              Tipo de factura (opcional)
+            </label>
+            <select
+              name="tipo_factura"
+              value={formData.tipo_factura}
+              onChange={(e) => setFormData({ ...formData, tipo_factura: e.target.value })}
+              className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+              <option value="">Sin especificar</option>
+              <option value="A">A (IVA discriminado)</option>
+              <option value="B">B (sin IVA discriminado)</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-[11px] font-medium uppercase tracking-[0.08em] text-text-secondary mb-1.5">
+              Factura (PDF o imagen, máx. 10MB)
+            </label>
+            <input
+              type="file"
+              name="factura"
+              accept="application/pdf,image/jpeg,image/png"
+              className="w-full border border-border bg-[#0a0a0a] px-3 py-2 text-sm text-text-primary file:mr-3 file:border-0 file:bg-accent file:px-3 file:py-1 file:text-xs file:font-semibold file:text-accent-ink"
+            />
+            {gasto?.factura_path && (
+              <p className="mt-2 text-xs text-text-secondary">Ya hay una factura adjunta. Si subes otra, reemplazará la actual.</p>
+            )}
+          </div>
 
           <div className="md:col-span-2">
             <label className="flex items-center gap-2">

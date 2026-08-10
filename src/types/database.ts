@@ -115,6 +115,9 @@ export interface Database {
           tipo_gasto: 'directo_evento' | 'inversion_empresa';
           fecha: string;
           evento_id: string | null;
+          forma_pago: 'tarjeta' | 'transferencia' | 'efectivo' | null;
+          tipo_factura: 'A' | 'B' | null;
+          factura_path: string | null;
           // Campo legado: mantener mientras exista en bases antiguas
           pagado_por: string | null;
           reembolsado: boolean;
@@ -130,6 +133,9 @@ export interface Database {
           tipo_gasto?: 'directo_evento' | 'inversion_empresa';
           fecha: string;
           evento_id?: string | null;
+          forma_pago?: 'tarjeta' | 'transferencia' | 'efectivo' | null;
+          tipo_factura?: 'A' | 'B' | null;
+          factura_path?: string | null;
           pagado_por?: string | null;
           reembolsado?: boolean;
           created_by?: string | null;
@@ -144,6 +150,9 @@ export interface Database {
           tipo_gasto?: 'directo_evento' | 'inversion_empresa';
           fecha?: string;
           evento_id?: string | null;
+          forma_pago?: 'tarjeta' | 'transferencia' | 'efectivo' | null;
+          tipo_factura?: 'A' | 'B' | null;
+          factura_path?: string | null;
           pagado_por?: string | null;
           reembolsado?: boolean;
           created_by?: string | null;

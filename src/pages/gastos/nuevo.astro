@@ -1,7 +1,7 @@
 ---
 import AppLayout from '../../layouts/AppLayout.astro';
 import GastoForm from '../../components/gastos/GastoForm.tsx';
-import { createGasto } from '../../services/gastos';
+import { createGasto, subirFacturaGasto } from '../../services/gastos';
 import { getEventos } from '../../services/eventos';
 import { getProfiles } from '../../services/profiles';
 
@@ -14,6 +14,10 @@ const modoEvento = Boolean(eventoParam);
 if (Astro.request.method === 'POST') {
   try {
     const formData = await Astro.request.formData();
+    const formaPago = formData.get('forma_pago')?.toString().trim() || null;
+    const tipoFactura = formData.get('tipo_factura')?.toString().trim() || null;
+    const facturaRaw = formData.get('factura');
+    const facturaFile = facturaRaw instanceof File && facturaRaw.size > 0 ? facturaRaw : null;
     
     const gastoData = {
       concepto: formData.get('concepto')?.toString() || '',
@@ -22,6 +26,9 @@ if (Astro.request.method === 'POST') {
       tipo_gasto: (formData.get('tipo_gasto')?.toString() || (modoEvento ? 'directo_evento' : 'inversion_empresa')) as 'directo_evento' | 'inversion_empresa',
       fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
       evento_id: formData.has('evento_id') && formData.get('evento_id') ? formData.get('evento_id')!.toString() : null,
+      forma_pago: formaPago as 'tarjeta' | 'transferencia' | 'efectivo' | null,
+      tipo_factura: tipoFactura as 'A' | 'B' | null,
+      factura_path: null,
       reembolsado: formData.get('reembolsado') === 'on',
     };
 
@@ -36,7 +43,12 @@ if (Astro.request.method === 'POST') {
       },
     ];
 
-    await createGasto(Astro, gastoData, fuentes);
+    const gastoCreado = await createGasto(Astro, gastoData, fuentes);
+
+    if (facturaFile) {
+      await subirFacturaGasto(Astro, gastoCreado.id, facturaFile, null);
+    }
+
     return Astro.redirect(modoEvento && eventoParam ? `/eventos/${eventoParam}/detalle` : '/gastos');
   } catch (error) {
     console.error('Error creating gasto:', error);

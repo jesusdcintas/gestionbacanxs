@@ -7,10 +7,28 @@ type GastoInsert = Database['public']['Tables']['gastos']['Insert'];
 type GastoUpdate = Database['public']['Tables']['gastos']['Update'];
 type GastoPago = Database['public']['Tables']['gasto_pagos']['Row'];
 export type TipoGasto = 'directo_evento' | 'inversion_empresa';
+export type FormaPagoGasto = 'tarjeta' | 'transferencia' | 'efectivo';
+export type TipoFacturaGasto = 'A' | 'B';
 
 export interface FuentePagoInput {
   socio_id: string | null;
   cantidad: number;
+}
+
+const ALLOWED_FACTURA_MIME = new Set(['application/pdf', 'image/jpeg', 'image/png']);
+
+function getFacturaExtension(file: File) {
+  if (file.type === 'application/pdf') return 'pdf';
+  if (file.type === 'image/jpeg') return 'jpg';
+  if (file.type === 'image/png') return 'png';
+
+  const name = file.name || '';
+  const ext = name.includes('.') ? name.split('.').pop()?.toLowerCase() : '';
+  if (ext === 'pdf' || ext === 'jpg' || ext === 'jpeg' || ext === 'png') {
+    return ext === 'jpeg' ? 'jpg' : ext;
+  }
+
+  throw new Error('Formato de factura no soportado. Usa PDF, JPG o PNG.');
 }
 
 export type GastoConFuentes = Gasto & {
@@ -92,6 +110,9 @@ export async function guardarGastoConPagos(
   const tipoGasto = (gastoData.tipo_gasto ?? 'directo_evento') as TipoGasto;
   const eventoId = gastoData.evento_id ?? null;
   const requiereFuentesExactas = tipoGasto === 'inversion_empresa';
+  const formaPago = (gastoData.forma_pago ?? null) as FormaPagoGasto | null;
+  const tipoFactura = (gastoData.tipo_factura ?? null) as TipoFacturaGasto | null;
+  const facturaPath = gastoData.factura_path ?? null;
 
   if (tipoGasto === 'directo_evento' && !eventoId) {
     throw new Error('Los gastos directos de evento deben estar vinculados a un evento.');
@@ -116,6 +137,9 @@ export async function guardarGastoConPagos(
     p_fecha: String(gastoData.fecha || new Date().toISOString().slice(0, 10)),
     p_evento_id: eventoId,
     p_reembolsado: Boolean(gastoData.reembolsado ?? false),
+    p_forma_pago: formaPago,
+    p_tipo_factura: tipoFactura,
+    p_factura_path: facturaPath,
     p_fuentes: fuentes as any,
   });
 
@@ -146,8 +170,103 @@ export async function updateGasto(
   return guardarGastoConPagos(context, gasto, fuentesPago, id);
 }
 
+export async function subirFacturaGasto(
+  context: APIContext,
+  gastoId: string,
+  file: File,
+  previousPath: string | null = null,
+) {
+  if (file.size <= 0) {
+    throw new Error('El archivo de factura está vacío.');
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    throw new Error('La factura supera el límite de 10MB.');
+  }
+
+  if (file.type && !ALLOWED_FACTURA_MIME.has(file.type)) {
+    throw new Error('Tipo de archivo no permitido. Solo PDF, JPG o PNG.');
+  }
+
+  const extension = getFacturaExtension(file);
+  const facturaPath = `${gastoId}/factura.${extension}`;
+  const supabase = getSupabaseServerClient(context);
+
+  if (previousPath) {
+    const { error: removeError } = await supabase.storage.from('facturas').remove([previousPath]);
+    if (removeError) {
+      console.error('Error borrando factura anterior:', removeError);
+    }
+  }
+
+  const { error: uploadError } = await supabase.storage.from('facturas').upload(facturaPath, file, {
+    contentType: file.type || (extension === 'pdf' ? 'application/pdf' : extension === 'png' ? 'image/png' : 'image/jpeg'),
+    upsert: true,
+  });
+
+  if (uploadError) {
+    console.error('Error subiendo factura:', uploadError);
+    throw new Error('No se pudo subir la factura al almacenamiento.');
+  }
+
+  const { error: updateError } = await supabase
+    .from('gastos')
+    .update({ factura_path: facturaPath })
+    .eq('id', gastoId);
+
+  if (updateError) {
+    console.error('Error guardando factura_path en gasto:', updateError);
+    throw new Error('No se pudo guardar la ruta de la factura en el gasto.');
+  }
+
+  return facturaPath;
+}
+
+export async function getFacturaSignedUrl(context: APIContext, gastoId: string) {
+  const supabase = getSupabaseServerClient(context);
+
+  const { data: gasto, error: gastoError } = await supabase
+    .from('gastos')
+    .select('factura_path')
+    .eq('id', gastoId)
+    .single();
+
+  if (gastoError) {
+    console.error('Error cargando factura_path del gasto:', gastoError);
+    throw new Error('No se pudo cargar la factura del gasto.');
+  }
+
+  if (!gasto.factura_path) {
+    throw new Error('Este gasto no tiene factura adjunta.');
+  }
+
+  const { data, error } = await supabase.storage
+    .from('facturas')
+    .createSignedUrl(gasto.factura_path, 60);
+
+  if (error || !data?.signedUrl) {
+    console.error('Error creando signed URL de factura:', error);
+    throw new Error('No se pudo generar el enlace temporal de la factura.');
+  }
+
+  return data.signedUrl;
+}
+
 export async function deleteGasto(context: APIContext, id: string) {
   const supabase = getSupabaseServerClient(context);
+
+  const { data: gasto } = await supabase
+    .from('gastos')
+    .select('factura_path')
+    .eq('id', id)
+    .single();
+
+  if (gasto?.factura_path) {
+    const { error: removeError } = await supabase.storage.from('facturas').remove([gasto.factura_path]);
+    if (removeError) {
+      console.error('Error borrando factura del bucket:', removeError);
+    }
+  }
 
   const { error } = await supabase.from('gastos').delete().eq('id', id);
 

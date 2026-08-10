@@ -1,7 +1,7 @@
 ---
 import AppLayout from '../../layouts/AppLayout.astro';
 import GastoForm from '../../components/gastos/GastoForm.tsx';
-import { getGasto, updateGasto } from '../../services/gastos';
+import { getGasto, subirFacturaGasto, updateGasto } from '../../services/gastos';
 import { getEventos } from '../../services/eventos';
 import { getProfiles } from '../../services/profiles';
 
@@ -26,6 +26,10 @@ const profiles = await getProfiles(Astro);
 if (Astro.request.method === 'POST') {
   try {
     const formData = await Astro.request.formData();
+    const formaPago = formData.get('forma_pago')?.toString().trim() || null;
+    const tipoFactura = formData.get('tipo_factura')?.toString().trim() || null;
+    const facturaRaw = formData.get('factura');
+    const facturaFile = facturaRaw instanceof File && facturaRaw.size > 0 ? facturaRaw : null;
     
     const gastoData = {
       concepto: formData.get('concepto')?.toString() || '',
@@ -34,6 +38,9 @@ if (Astro.request.method === 'POST') {
       tipo_gasto: (formData.get('tipo_gasto')?.toString() || gasto.tipo_gasto || 'inversion_empresa') as 'directo_evento' | 'inversion_empresa',
       fecha: formData.get('fecha')?.toString() || new Date().toISOString().split('T')[0],
       evento_id: formData.has('evento_id') && formData.get('evento_id') ? formData.get('evento_id')!.toString() : null,
+      forma_pago: formaPago as 'tarjeta' | 'transferencia' | 'efectivo' | null,
+      tipo_factura: tipoFactura as 'A' | 'B' | null,
+      factura_path: gasto.factura_path,
       reembolsado: formData.get('reembolsado') === 'on',
     };
 
@@ -50,7 +57,12 @@ if (Astro.request.method === 'POST') {
 
     console.log('Datos del gasto a actualizar:', JSON.stringify(gastoData, null, 2));
     
-    await updateGasto(Astro, id, gastoData, fuentes);
+    const gastoActualizado = await updateGasto(Astro, id, gastoData, fuentes);
+
+    if (facturaFile) {
+      await subirFacturaGasto(Astro, id, facturaFile, gastoActualizado.factura_path ?? gasto.factura_path);
+    }
+
     return Astro.redirect('/gastos');
   } catch (error) {
     console.error('Error updating gasto:', error);

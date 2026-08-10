@@ -6,7 +6,7 @@ import { Checkbox } from '../ui/Checkbox';
 import ConfirmDialog from '../ui/ConfirmDialog';
 import { Select } from '../ui/Select';
 import { StampLabel } from '../ui/StampLabel';
-import { Trash2 } from 'lucide-react';
+import { Paperclip, Trash2 } from 'lucide-react';
 import type { Database } from '../../types/database';
 
 type Gasto = Database['public']['Tables']['gastos']['Row'];
@@ -70,6 +70,7 @@ export default function GastosTable({
   const [bulkLoading, setBulkLoading] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [facturaError, setFacturaError] = useState<string | null>(null);
 
   useEffect(() => {
     setRows(gastos);
@@ -268,6 +269,29 @@ export default function GastosTable({
     }
   };
 
+  const openFactura = async (gasto: GastoEnriquecido) => {
+    if (!gasto.factura_path) return;
+
+    setFacturaError(null);
+
+    try {
+      const response = await fetch(`/api/gastos/${gasto.id}/factura-url`);
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || 'No se pudo abrir la factura');
+      }
+
+      const payload = await response.json();
+      if (!payload?.url) {
+        throw new Error('No se pudo generar enlace temporal de factura');
+      }
+
+      window.open(payload.url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      setFacturaError(error instanceof Error ? error.message : 'No se pudo abrir la factura');
+    }
+  };
+
   if (sortedRows.length === 0) {
     return <div className="py-12 text-center text-text-secondary">{emptyMessage}</div>;
   }
@@ -360,7 +384,25 @@ export default function GastosTable({
                       onChange={() => toggleRowSelection(gasto.id)}
                     />
                   </td>
-                  <td className="px-4 py-3 text-sm font-medium text-text-primary">{gasto.concepto}</td>
+                  <td className="px-4 py-3 text-sm font-medium text-text-primary">
+                    <div className="flex items-center gap-2">
+                      <span>{gasto.concepto}</span>
+                      {gasto.factura_path && (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void openFactura(gasto);
+                          }}
+                          className="inline-flex items-center text-text-secondary hover:text-text-primary"
+                          title="Abrir factura adjunta"
+                          aria-label="Abrir factura adjunta"
+                        >
+                          <Paperclip size={14} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-sm text-text-secondary" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
                     {formatDate(gasto.fecha)}
                   </td>
@@ -497,6 +539,7 @@ export default function GastosTable({
       />
 
       {deleteError ? <div className="text-sm text-danger">{deleteError}</div> : null}
+      {facturaError ? <div className="text-sm text-danger">{facturaError}</div> : null}
     </div>
   );
 }

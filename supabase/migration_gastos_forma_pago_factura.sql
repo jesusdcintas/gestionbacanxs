@@ -1,37 +1,8 @@
 begin;
 
 -- --------------------------------------------------------------------------
--- PREVIEW (ejecutar antes de aplicar esta migracion)
+-- 1) Nuevas columnas en gastos
 -- --------------------------------------------------------------------------
--- select concepto, cantidad, evento_id, categoria as categoria_actual
--- from public.gastos
--- where tipo_gasto = 'consumible'
--- order by fecha desc, created_at desc;
-
--- --------------------------------------------------------------------------
--- 1) categoria: agregar 'Consumible'
--- --------------------------------------------------------------------------
-alter table public.gastos drop constraint if exists gastos_categoria_check;
-alter table public.gastos add constraint gastos_categoria_check
-  check (categoria in ('Transporte', 'Equipamiento', 'Alojamiento', 'Comida', 'Promoción', 'Servicios', 'Consumible', 'Otros'));
-
--- --------------------------------------------------------------------------
--- 2) Migracion de datos: consumible pasa a categoria
--- --------------------------------------------------------------------------
-update public.gastos
-set
-  categoria = 'Consumible',
-  tipo_gasto = 'inversion_empresa',
-  updated_at = now()
-where tipo_gasto = 'consumible';
-
--- --------------------------------------------------------------------------
--- 3) tipo_gasto: volver a dos valores
--- --------------------------------------------------------------------------
-alter table public.gastos drop constraint if exists gastos_tipo_gasto_check;
-alter table public.gastos add constraint gastos_tipo_gasto_check
-  check (tipo_gasto in ('directo_evento', 'inversion_empresa'));
-
 alter table public.gastos add column if not exists forma_pago text;
 alter table public.gastos add column if not exists tipo_factura text;
 alter table public.gastos add column if not exists factura_path text;
@@ -45,7 +16,81 @@ alter table public.gastos add constraint gastos_tipo_factura_check
   check (tipo_factura in ('A', 'B') or tipo_factura is null);
 
 -- --------------------------------------------------------------------------
--- 4) RPC guardar_gasto_con_pagos: validaciones sin consumible en tipo_gasto
+-- 2) Storage privado de facturas (10MB, PDF/JPG/PNG)
+-- --------------------------------------------------------------------------
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'facturas',
+  'facturas',
+  false,
+  10485760,
+  array['application/pdf', 'image/jpeg', 'image/png']::text[]
+)
+on conflict (id) do update
+set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+do $$
+declare
+  v_owner name;
+begin
+  select pg_get_userbyid(c.relowner)
+  into v_owner
+  from pg_class c
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'storage'
+    and c.relname = 'objects';
+
+  if v_owner = current_user then
+    execute 'alter table storage.objects enable row level security';
+
+    execute 'drop policy if exists facturas_authenticated_select on storage.objects';
+    execute 'drop policy if exists facturas_authenticated_insert on storage.objects';
+    execute 'drop policy if exists facturas_authenticated_update on storage.objects';
+    execute 'drop policy if exists facturas_authenticated_delete on storage.objects';
+
+    execute $p$
+      create policy facturas_authenticated_select
+      on storage.objects
+      for select
+      to authenticated
+      using (bucket_id = 'facturas')
+    $p$;
+
+    execute $p$
+      create policy facturas_authenticated_insert
+      on storage.objects
+      for insert
+      to authenticated
+      with check (bucket_id = 'facturas')
+    $p$;
+
+    execute $p$
+      create policy facturas_authenticated_update
+      on storage.objects
+      for update
+      to authenticated
+      using (bucket_id = 'facturas')
+      with check (bucket_id = 'facturas')
+    $p$;
+
+    execute $p$
+      create policy facturas_authenticated_delete
+      on storage.objects
+      for delete
+      to authenticated
+      using (bucket_id = 'facturas')
+    $p$;
+  else
+    raise notice 'No se aplicaron policies de storage.objects: current_user (%) no es owner (%). Configúralas desde Dashboard > Storage > Policies.', current_user, v_owner;
+  end if;
+end
+$$;
+
+-- --------------------------------------------------------------------------
+-- 3) RPC guardar_gasto_con_pagos extendida
 -- --------------------------------------------------------------------------
 create or replace function public.guardar_gasto_con_pagos(
   p_gasto_id uuid,
@@ -97,7 +142,7 @@ begin
     raise exception 'Los gastos directos de evento deben tener evento_id';
   end if;
 
-  if v_tipo_gasto in ('inversion_empresa') and (p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0) then
+  if v_tipo_gasto = 'inversion_empresa' and (p_fuentes is null or jsonb_typeof(p_fuentes) <> 'array' or jsonb_array_length(p_fuentes) = 0) then
     raise exception 'Debes enviar al menos una fuente de pago';
   end if;
 
@@ -106,7 +151,7 @@ begin
   from jsonb_array_elements(coalesce(p_fuentes, '[]'::jsonb)) x
   where coalesce((x.value->>'cantidad')::numeric, 0) > 0;
 
-  if v_tipo_gasto in ('inversion_empresa') and abs(v_suma_fuentes - p_cantidad) > 0.01 then
+  if v_tipo_gasto = 'inversion_empresa' and abs(v_suma_fuentes - p_cantidad) > 0.01 then
     raise exception 'La suma de fuentes (%) no coincide con la cantidad del gasto (%)', v_suma_fuentes, p_cantidad;
   end if;
 
@@ -116,12 +161,12 @@ begin
       cantidad,
       categoria,
       tipo_gasto,
-      forma_pago,
-      tipo_factura,
-      factura_path,
       fecha,
       evento_id,
       reembolsado,
+      forma_pago,
+      tipo_factura,
+      factura_path,
       created_by
     )
     values (
@@ -129,12 +174,12 @@ begin
       p_cantidad,
       coalesce(nullif(trim(p_categoria), ''), 'Otros'),
       v_tipo_gasto,
-      v_forma_pago,
-      v_tipo_factura,
-      nullif(trim(coalesce(p_factura_path, '')), ''),
       coalesce(p_fecha, current_date),
       p_evento_id,
       coalesce(p_reembolsado, false),
+      v_forma_pago,
+      v_tipo_factura,
+      nullif(trim(coalesce(p_factura_path, '')), ''),
       auth.uid()
     )
     returning id into v_gasto_id;
@@ -145,12 +190,12 @@ begin
       cantidad = p_cantidad,
       categoria = coalesce(nullif(trim(p_categoria), ''), 'Otros'),
       tipo_gasto = v_tipo_gasto,
-      forma_pago = v_forma_pago,
-      tipo_factura = v_tipo_factura,
-      factura_path = nullif(trim(coalesce(p_factura_path, '')), ''),
       fecha = coalesce(p_fecha, fecha),
       evento_id = p_evento_id,
       reembolsado = coalesce(p_reembolsado, false),
+      forma_pago = v_forma_pago,
+      tipo_factura = v_tipo_factura,
+      factura_path = nullif(trim(coalesce(p_factura_path, '')), ''),
       updated_at = now()
     where id = p_gasto_id;
 
@@ -163,7 +208,6 @@ begin
     delete from public.gasto_pagos where gasto_id = v_gasto_id;
   end if;
 
-  -- Recalcular salida de fondo de este gasto: borrar y recrear.
   delete from public.fondo_movimientos
   where gasto_id = v_gasto_id
     and cantidad < 0
