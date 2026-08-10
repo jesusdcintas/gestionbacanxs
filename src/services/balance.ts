@@ -395,6 +395,28 @@ export interface BalanceMonthData {
   beneficio: number;
 }
 
+export interface BalanceIngresoDetalle {
+  id: string;
+  fecha: string;
+  cantidad: number;
+  concepto: string | null;
+  eventoNombre: string | null;
+}
+
+export interface BalanceGastoDetalle {
+  id: string;
+  fecha: string;
+  cantidad: number;
+  concepto: string;
+  categoria: string;
+  tipo_gasto: 'directo_evento' | 'inversion_empresa';
+}
+
+export interface BalancePeriodoDetalle {
+  ingresos: BalanceIngresoDetalle[];
+  gastos: BalanceGastoDetalle[];
+}
+
 export async function getBalanceData(
   context: APIContext,
   meses?: number | null,
@@ -448,6 +470,71 @@ export async function getBalanceData(
   return Array.from(buckets.values())
     .map((b) => ({ ...b, beneficio: b.ingresos - b.gastos }))
     .sort((a, b) => a.mes.localeCompare(b.mes));
+}
+
+/**
+ * Obtiene el detalle individual de ingresos y gastos para el panel por periodo.
+ */
+export async function getBalancePeriodoDetalle(
+  context: APIContext,
+): Promise<BalancePeriodoDetalle> {
+  const supabase = getSupabaseServerClient(context);
+
+  type IngresoRow = {
+    id: string;
+    fecha: string;
+    cantidad: number | string;
+    concepto: string | null;
+    eventos: { nombre: string | null } | { nombre: string | null }[] | null;
+  };
+
+  type GastoRow = {
+    id: string;
+    fecha: string;
+    cantidad: number | string;
+    concepto: string;
+    categoria: string;
+    tipo_gasto: 'directo_evento' | 'inversion_empresa';
+  };
+
+  const [ingresosRes, gastosRes] = await Promise.all([
+    supabase
+      .from('pagos_evento')
+      .select('id, fecha, cantidad, concepto, eventos(nombre)')
+      .order('fecha', { ascending: false }),
+    supabase
+      .from('gastos')
+      .select('id, fecha, cantidad, concepto, categoria, tipo_gasto')
+      .order('fecha', { ascending: false }),
+  ]);
+
+  if (ingresosRes.error || gastosRes.error) {
+    console.error('Error fetching balance periodo detalle:', ingresosRes.error ?? gastosRes.error);
+    throw new Error('No se pudo cargar el detalle de ingresos y gastos');
+  }
+
+  const ingresos: BalanceIngresoDetalle[] = ((ingresosRes.data ?? []) as IngresoRow[]).map((item) => {
+    const eventoJoin = Array.isArray(item.eventos) ? item.eventos[0] ?? null : item.eventos;
+
+    return {
+      id: item.id,
+      fecha: item.fecha,
+      cantidad: Number(item.cantidad),
+      concepto: item.concepto,
+      eventoNombre: eventoJoin?.nombre ?? null,
+    };
+  });
+
+  const gastos: BalanceGastoDetalle[] = ((gastosRes.data ?? []) as GastoRow[]).map((item) => ({
+    id: item.id,
+    fecha: item.fecha,
+    cantidad: Number(item.cantidad),
+    concepto: item.concepto,
+    categoria: item.categoria,
+    tipo_gasto: item.tipo_gasto,
+  }));
+
+  return { ingresos, gastos };
 }
 
 /**

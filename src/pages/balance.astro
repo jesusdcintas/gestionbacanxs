@@ -9,15 +9,25 @@ import BalanceLiquidacionPanel from '../components/balance/BalanceLiquidacionPan
 import BalancePeriodoPanel from '../components/balance/BalancePeriodoPanel.tsx';
 import {
   getBalanceData,
+  getBalancePeriodoDetalle,
   getCategoryData,
   getBalanceSocios,
   getRepartosDetallePorSocio,
   getPendientesDetallePorSocio,
 } from '../services/balance';
 
-const [monthlyDataAll, monthlyData6m, categoryData, balanceSocios, repartosDetallePorSocio, pendientesDetallePorSocio] = await Promise.all([
+const [
+  monthlyDataAll,
+  monthlyData6m,
+  balancePeriodoDetalle,
+  categoryData,
+  balanceSocios,
+  repartosDetallePorSocio,
+  pendientesDetallePorSocio,
+] = await Promise.all([
   getBalanceData(Astro),
   getBalanceData(Astro, 6),
+  getBalancePeriodoDetalle(Astro),
   getCategoryData(Astro),
   getBalanceSocios(Astro),
   getRepartosDetallePorSocio(Astro),
@@ -44,7 +54,12 @@ const formatCurrency = (value: number) =>
       </p>
     </div>
 
-    <BalancePeriodoPanel monthlyData={monthlyDataAll} client:load />
+    <BalancePeriodoPanel
+      monthlyData={monthlyDataAll}
+      ingresosDetalle={balancePeriodoDetalle.ingresos}
+      gastosDetalle={balancePeriodoDetalle.gastos}
+      client:load
+    />
 
     <!-- Balance entre socios -->
     <div class="space-y-4">
