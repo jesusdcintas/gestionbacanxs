@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatCurrency } from '../../lib/format';
 import { formatDate } from '../../lib/date';
 import { Button } from '../ui/Button';
@@ -76,8 +76,8 @@ export default function GastosTable({
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [facturaError, setFacturaError] = useState<string | null>(null);
-  const [resumenOpen, setResumenOpen] = useState(false);
-  const [activeGastoId, setActiveGastoId] = useState<string | null>(null);
+  const [modalState, setModalState] = useState<{ type: 'none' } | { type: 'resumen'; gastoId: string }>({ type: 'none' });
+  const initialOpenConsumed = useRef(false);
 
   useEffect(() => {
     setRows(gastos);
@@ -105,27 +105,27 @@ export default function GastosTable({
   const orderedIds = sortedRows.map((row) => row.id);
 
   useEffect(() => {
+    if (initialOpenConsumed.current) return;
     if (!initialOpenGastoId) return;
-    if (activeGastoId) return;
 
     const candidateIds = initialVisibleGastosIds.length > 0 ? initialVisibleGastosIds : orderedIds;
     const firstVisible = candidateIds.find((id) => orderedIds.includes(id));
     const targetId = orderedIds.includes(initialOpenGastoId) ? initialOpenGastoId : firstVisible ?? null;
 
     if (targetId) {
-      setActiveGastoId(targetId);
-      setResumenOpen(true);
+      setModalState({ type: 'resumen', gastoId: targetId });
     }
-  }, [initialOpenGastoId, initialVisibleGastosIds, orderedIds, activeGastoId]);
+
+    initialOpenConsumed.current = true;
+  }, [initialOpenGastoId, initialVisibleGastosIds, orderedIds]);
 
   const openItem = (id: string) => {
-    setActiveGastoId(id);
-    setResumenOpen(true);
+    setModalState({ type: 'resumen', gastoId: id });
   };
 
   const closeResumen = () => {
-    setResumenOpen(false);
-    setActiveGastoId(null);
+    setModalState({ type: 'none' });
+    initialOpenConsumed.current = true;
 
     const url = new URL(window.location.href);
     url.searchParams.delete('open_gasto');
@@ -587,12 +587,12 @@ export default function GastosTable({
       {facturaError ? <div className="text-sm text-danger">{facturaError}</div> : null}
 
       <GastoResumenModal
-        open={resumenOpen}
+        open={modalState.type === 'resumen'}
         gastos={rows}
         orderedIds={orderedIds}
-        currentId={activeGastoId}
+        currentId={modalState.type === 'resumen' ? modalState.gastoId : null}
         onClose={closeResumen}
-        onSelectId={setActiveGastoId}
+        onSelectId={(id) => setModalState({ type: 'resumen', gastoId: id })}
         onEdit={editFromResumen}
       />
     </div>

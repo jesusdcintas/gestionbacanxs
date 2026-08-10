@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { StampLabel } from '../ui/StampLabel';
@@ -68,8 +68,8 @@ export default function FinanzasEventoPanel({
   const [deleteRow, setDeleteRow] = useState<GastoEvento | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [resumenOpen, setResumenOpen] = useState(false);
-  const [activeGastoId, setActiveGastoId] = useState<string | null>(null);
+  const [modalState, setModalState] = useState<{ type: 'none' } | { type: 'resumen'; gastoId: string }>({ type: 'none' });
+  const initialOpenConsumed = useRef(false);
 
   const totalGastosPagados = useMemo(
     () => gastos.filter((gasto) => gasto.pagado).reduce((sum, gasto) => sum + Number(gasto.cantidad), 0),
@@ -83,19 +83,21 @@ export default function FinanzasEventoPanel({
   const orderedIds = useMemo(() => gastos.map((gasto) => gasto.id), [gastos]);
 
   useEffect(() => {
-    if (!initialOpenGastoId || activeGastoId) return;
+    if (initialOpenConsumed.current) return;
+    if (!initialOpenGastoId) return;
     const candidateIds = initialVisibleGastosIds.length > 0 ? initialVisibleGastosIds : orderedIds;
     const firstVisible = candidateIds.find((id) => orderedIds.includes(id));
     const targetId = orderedIds.includes(initialOpenGastoId) ? initialOpenGastoId : firstVisible ?? null;
     if (targetId) {
-      setActiveGastoId(targetId);
-      setResumenOpen(true);
+      setModalState({ type: 'resumen', gastoId: targetId });
     }
-  }, [initialOpenGastoId, initialVisibleGastosIds, orderedIds, activeGastoId]);
+
+    initialOpenConsumed.current = true;
+  }, [initialOpenGastoId, initialVisibleGastosIds, orderedIds]);
 
   const closeResumen = () => {
-    setResumenOpen(false);
-    setActiveGastoId(null);
+    setModalState({ type: 'none' });
+    initialOpenConsumed.current = true;
 
     const url = new URL(window.location.href);
     url.searchParams.delete('open_gasto');
@@ -237,14 +239,12 @@ export default function FinanzasEventoPanel({
                 role="button"
                 tabIndex={0}
                 onClick={() => {
-                  setActiveGastoId(gasto.id);
-                  setResumenOpen(true);
+                  setModalState({ type: 'resumen', gastoId: gasto.id });
                 }}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    setActiveGastoId(gasto.id);
-                    setResumenOpen(true);
+                    setModalState({ type: 'resumen', gastoId: gasto.id });
                   }
                 }}
               >
@@ -309,12 +309,12 @@ export default function FinanzasEventoPanel({
       />
 
       <GastoResumenModal
-        open={resumenOpen}
+        open={modalState.type === 'resumen'}
         gastos={gastos}
         orderedIds={orderedIds}
-        currentId={activeGastoId}
+        currentId={modalState.type === 'resumen' ? modalState.gastoId : null}
         onClose={closeResumen}
-        onSelectId={setActiveGastoId}
+        onSelectId={(id) => setModalState({ type: 'resumen', gastoId: id })}
         onEdit={editFromResumen}
         eventoFallbackNombre={eventoNombre}
       />

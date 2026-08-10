@@ -124,7 +124,16 @@ export default function GastoResumenModal({
   };
 
   return (
-    <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/75 px-4" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-100 flex items-center justify-center bg-black/75 px-4"
+      role="dialog"
+      aria-modal="true"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
       <div className="w-full max-w-3xl border border-border-strong bg-surface p-5 shadow-2xl">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
